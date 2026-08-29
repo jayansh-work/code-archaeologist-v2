@@ -201,6 +201,30 @@ def _intent(question: str) -> str:
         )
     ):
         return "recent_activity"
+    if any(
+        phrase in q
+        for phrase in (
+            "come to existence",
+            "come into existence",
+            "how did this start",
+            "how did this begin",
+            "how was this created",
+            "how did this repo",
+            "how did this repository",
+            "how did this project",
+            "how did this come",
+            "where did this come",
+            "origin of this",
+            "explain this repository",
+            "explain the repository",
+            "what is this repository",
+            "repository overview",
+            "how did this evolve",
+            "explain the evolution",
+            "how this began",
+        )
+    ):
+        return "overview"
     if PATHISH_RE.search(question) or any(
         phrase in q for phrase in ("history for", "history of", "when was", "modified", "this file")
     ):
@@ -331,6 +355,44 @@ def _recent_activity(analysis: StoredAnalysis) -> QueryResponse:
         intent="recent_activity",
         answer=answer,
         evidence=[_to_evidence(commit) for commit in recent],
+    )
+
+
+def _overview(analysis: StoredAnalysis) -> QueryResponse:
+    commits = analysis.commits
+    if not commits:
+        return QueryResponse(
+            mode="repository-search",
+            intent="overview",
+            answer="No analyzed commits are available to describe this repository.",
+            evidence=[],
+        )
+    newest = commits[0]
+    oldest = commits[-1]
+    largest = max(commits, key=_commit_churn)
+    picked: list[CommitEvidence] = []
+    seen: set[str] = set()
+    for commit in (oldest, newest, largest, *commits[:6]):
+        if commit.hash in seen:
+            continue
+        seen.add(commit.hash)
+        picked.append(commit)
+        if len(picked) >= 10:
+            break
+    answer = (
+        f"The analyzed window covers the latest {analysis.summary.commits_analyzed} commits "
+        f"of {analysis.repository.owner}/{analysis.repository.name}, not the full repository origin. "
+        f"Oldest analyzed commit: {oldest.short_hash} ({oldest.timestamp}) — {oldest.message}. "
+        f"Newest analyzed commit: {newest.short_hash} ({newest.timestamp}) — {newest.message}. "
+        f"Largest line change in this window: {largest.short_hash} "
+        f"(+{largest.additions} −{largest.deletions}). "
+        "Git history in this window can show what changed recently, not why the project was originally created."
+    )
+    return QueryResponse(
+        mode="repository-search",
+        intent="overview",
+        answer=answer,
+        evidence=[_to_evidence(commit) for commit in picked],
     )
 
 
@@ -573,6 +635,7 @@ _HANDLERS = {
     "largest_commits": lambda analysis, _question: _largest_commits(analysis),
     "top_contributors": lambda analysis, _question: _top_contributors(analysis),
     "recent_activity": lambda analysis, _question: _recent_activity(analysis),
+    "overview": lambda analysis, _question: _overview(analysis),
     "cochanged_files": lambda analysis, _question: _cochanged(analysis),
     "commit_lookup": _commit_lookup,
     "before_commit": _before_commit,

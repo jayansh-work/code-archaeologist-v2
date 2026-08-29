@@ -154,6 +154,7 @@ def investigate(
             mode="ai-unavailable",
             answer="",
             ai_used=False,
+            unavailable_reason="not_configured",
             **base,
         )
 
@@ -165,6 +166,7 @@ def investigate(
             mode="ai-unavailable",
             answer="",
             ai_used=False,
+            unavailable_reason="provider_error",
             **base,
         )
     if isinstance(result, str):
@@ -182,6 +184,7 @@ def investigate(
             mode="ai-unavailable",
             answer="",
             ai_used=False,
+            unavailable_reason="provider_error",
             **base,
         )
     confidence = str(result.get("confidence") or "medium").lower()

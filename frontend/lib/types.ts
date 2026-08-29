@@ -76,6 +76,7 @@ export type QueryResponse = {
   related_files: string[];
   follow_ups: string[];
   retrieval_summary: string;
+  unavailable_reason: string | null;
 };
 
 export type NotesResponse = {

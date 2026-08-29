@@ -96,3 +96,10 @@ def test_hotspots_and_important_changes() -> None:
     important = answer_question(_analysis(), "What are the most important changes in this repository?")
     assert important.intent == "largest_commits"
     assert important.evidence[0].short_hash == "ccccccc"
+
+
+def test_origin_question_uses_overview() -> None:
+    result = answer_question(_analysis(), "how did this come to existence")
+    assert result.intent == "overview"
+    assert result.evidence
+    assert "not the full repository origin" in result.answer

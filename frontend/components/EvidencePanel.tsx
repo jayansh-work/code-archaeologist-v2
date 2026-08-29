@@ -30,8 +30,16 @@ export default function EvidencePanel({
       </h2>
       {unavailable ? (
         <div className="error-box" role="status">
-          <p>AI investigation is temporarily unavailable.</p>
-          <p>Repository evidence remains available below.</p>
+          <p>
+            {result.unavailable_reason === "not_configured"
+              ? "AI investigation is not configured."
+              : "AI investigation is temporarily unavailable."}
+          </p>
+          <p>
+            {result.unavailable_reason === "not_configured"
+              ? "Add GEMINI_API_KEY to backend/.env, restart the API, then retry. Repository evidence remains available below."
+              : "Repository evidence remains available below."}
+          </p>
           <button className="ghost-btn" type="button" onClick={onRetry} disabled={loading}>
             Retry
           </button>

@@ -117,6 +117,7 @@ class QueryResponse(BaseModel):
     related_files: list[str] = Field(default_factory=list)
     follow_ups: list[str] = Field(default_factory=list)
     retrieval_summary: str = ""
+    unavailable_reason: str | None = None
 
 
 class NotesResponse(BaseModel):
