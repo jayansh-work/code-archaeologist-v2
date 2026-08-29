@@ -103,3 +103,9 @@ def test_origin_question_uses_overview() -> None:
     assert result.intent == "overview"
     assert result.evidence
     assert "not the full repository origin" in result.answer
+
+
+def test_how_repository_works_uses_overview() -> None:
+    result = answer_question(_analysis(), "how does this repository work?")
+    assert result.intent == "overview"
+    assert result.evidence

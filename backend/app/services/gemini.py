@@ -3,13 +3,25 @@
 from __future__ import annotations
 
 import json
+import os
 import re
+from pathlib import Path
 
 import httpx
+from dotenv import load_dotenv
 
 from app.config import settings
 from app.models import ArchaeologistNote, QueryResponse
 from app.services.analysis_store import StoredAnalysis
+
+BACKEND_DIR = Path(__file__).resolve().parents[1]
+
+FALLBACK_MODELS = (
+    "gemini-3.5-flash",
+    "gemini-3.6-flash",
+    "gemini-3.7-flash",
+    "gemini-flash-latest",
+)
 
 INVESTIGATE_RULES = """You are Code Archaeologist, investigating Git history for a developer.
 
@@ -49,8 +61,36 @@ Maximum 2 notes. Prefer one pattern and one caveat if needed.
 """
 
 
+def _refresh_env() -> None:
+    load_dotenv(BACKEND_DIR / ".env", override=True)
+
+
+def _api_key() -> str:
+    _refresh_env()
+    return (
+        os.getenv("GEMINI_API_KEY")
+        or os.getenv("GOOGLE_API_KEY")
+        or settings.gemini_api_key
+        or settings.google_api_key
+        or ""
+    ).strip()
+
+
+def _preferred_model() -> str:
+    _refresh_env()
+    return (os.getenv("GEMINI_MODEL") or settings.gemini_model or FALLBACK_MODELS[0]).strip()
+
+
 def gemini_available() -> bool:
-    return settings.gemini_enabled
+    return bool(_api_key())
+
+
+def _models_to_try(preferred: str) -> list[str]:
+    ordered = [preferred]
+    for model in FALLBACK_MODELS:
+        if model not in ordered:
+            ordered.append(model)
+    return ordered
 
 
 def _parse_json_object(text: str) -> dict[str, object] | None:
@@ -70,13 +110,10 @@ def _parse_json_object(text: str) -> dict[str, object] | None:
     return data if isinstance(data, dict) else None
 
 
-def _call_gemini(system: str, user: str) -> dict[str, object] | str | None:
-    if not settings.gemini_enabled:
-        return None
-    url = (
-        "https://generativelanguage.googleapis.com/v1beta/models/"
-        f"{settings.gemini_model}:generateContent"
-    )
+def _call_gemini(system: str, user: str) -> tuple[dict[str, object] | str | None, str | None]:
+    key = _api_key()
+    if not key:
+        return None, "not_configured"
     body = {
         "system_instruction": {"parts": [{"text": system}]},
         "contents": [{"role": "user", "parts": [{"text": user}]}],
@@ -86,23 +123,43 @@ def _call_gemini(system: str, user: str) -> dict[str, object] | str | None:
             "responseMimeType": "application/json",
         },
     }
-    try:
-        with httpx.Client(timeout=settings.gemini_timeout_seconds) as client:
-            result = client.post(url, params={"key": settings.gemini_api_key}, json=body)
-        if result.status_code >= 400:
-            return None
-        data = result.json()
-        candidates = data.get("candidates") or []
-        if not candidates:
-            return None
-        parts = (candidates[0].get("content") or {}).get("parts") or []
-        text = "".join(part.get("text", "") for part in parts).strip()
-        if not text:
-            return None
-        parsed = _parse_json_object(text)
-        return parsed if parsed is not None else text
-    except (httpx.HTTPError, ValueError, KeyError):
-        return None
+    last_reason = "provider_error"
+    for model in _models_to_try(_preferred_model()):
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
+        try:
+            with httpx.Client(timeout=settings.gemini_timeout_seconds) as client:
+                result = client.post(
+                    url,
+                    headers={
+                        "x-goog-api-key": key,
+                        "Content-Type": "application/json",
+                    },
+                    json=body,
+                )
+            if result.status_code in {401, 403}:
+                return None, "invalid_key"
+            if result.status_code == 404:
+                last_reason = "provider_error"
+                continue
+            if result.status_code >= 400:
+                last_reason = "provider_error"
+                continue
+            data = result.json()
+            candidates = data.get("candidates") or []
+            if not candidates:
+                last_reason = "provider_error"
+                continue
+            parts = (candidates[0].get("content") or {}).get("parts") or []
+            text = "".join(part.get("text", "") for part in parts).strip()
+            if not text:
+                last_reason = "provider_error"
+                continue
+            parsed = _parse_json_object(text)
+            return (parsed if parsed is not None else text), None
+        except (httpx.HTTPError, ValueError, KeyError):
+            last_reason = "provider_error"
+            continue
+    return None, last_reason
 
 
 def _evidence_payload(analysis: StoredAnalysis, retrieved: QueryResponse) -> dict[str, object]:
@@ -141,15 +198,16 @@ def investigate(
     question: str,
     retrieved: QueryResponse,
 ) -> QueryResponse:
+    key_present = bool(_api_key())
     base = {
         "intent": retrieved.intent,
         "evidence": retrieved.evidence,
         "retrieval_summary": retrieved.retrieval_summary or retrieved.answer,
         "related_commits": retrieved.related_commits,
         "related_files": retrieved.related_files,
-        "ai_available": settings.gemini_enabled,
+        "ai_available": key_present,
     }
-    if not settings.gemini_enabled:
+    if not key_present:
         return QueryResponse(
             mode="ai-unavailable",
             answer="",
@@ -160,13 +218,13 @@ def investigate(
 
     payload = _evidence_payload(analysis, retrieved)
     user = f"Question:\n{question}\n\nEvidence:\n{json.dumps(payload, ensure_ascii=True)}"
-    result = _call_gemini(INVESTIGATE_RULES, user)
+    result, reason = _call_gemini(INVESTIGATE_RULES, user)
     if result is None:
         return QueryResponse(
             mode="ai-unavailable",
             answer="",
             ai_used=False,
-            unavailable_reason="provider_error",
+            unavailable_reason=reason or "provider_error",
             **base,
         )
     if isinstance(result, str):
@@ -209,7 +267,7 @@ def investigate(
 
 
 def generate_ai_notes(analysis: StoredAnalysis) -> list[ArchaeologistNote]:
-    if not settings.gemini_enabled:
+    if not _api_key():
         return []
     payload = {
         "repository": f"{analysis.repository.owner}/{analysis.repository.name}",
@@ -226,7 +284,7 @@ def generate_ai_notes(analysis: StoredAnalysis) -> list[ArchaeologistNote]:
             for commit in analysis.commits[:12]
         ],
     }
-    result = _call_gemini(NOTES_RULES, json.dumps(payload, ensure_ascii=True))
+    result, _reason = _call_gemini(NOTES_RULES, json.dumps(payload, ensure_ascii=True))
     if not isinstance(result, dict):
         return []
     raw_notes = result.get("notes") or []

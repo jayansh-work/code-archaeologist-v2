@@ -114,7 +114,8 @@ Copy examples; do not commit real `.env` files.
 | Variable | Purpose |
 | --- | --- |
 | `GEMINI_API_KEY` | Enables Ask Code Archaeologist. Copy `backend/.env.example` to `backend/.env` and set the key. Git analysis still works when unset. |
-| `GEMINI_MODEL` | Optional model id (default `gemini-2.0-flash`). |
+| `GOOGLE_API_KEY` | Optional fallback if `GEMINI_API_KEY` is empty. |
+| `GEMINI_MODEL` | Optional model id (default `gemini-3.5-flash`). `gemini-2.0-flash` is shut down. |
 | `CORS_ORIGINS` | Allowed browser origins. Local default is localhost/127.0.0.1 port 3000. |
 
 **Frontend** (`frontend/.env.example`)

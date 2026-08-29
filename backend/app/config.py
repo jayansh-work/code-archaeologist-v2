@@ -1,9 +1,13 @@
+from pathlib import Path
+
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+BACKEND_DIR = Path(__file__).resolve().parent.parent
 
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
-        env_file=".env",
+        env_file=BACKEND_DIR / ".env",
         env_file_encoding="utf-8",
         extra="ignore",
     )
@@ -23,8 +27,9 @@ class Settings(BaseSettings):
     cors_origins: str = "http://localhost:3000,http://127.0.0.1:3000"
 
     gemini_api_key: str = ""
-    gemini_model: str = "gemini-2.0-flash"
-    gemini_timeout_seconds: int = 20
+    google_api_key: str = ""
+    gemini_model: str = "gemini-3.5-flash"
+    gemini_timeout_seconds: int = 30
 
     @property
     def allowed_origins(self) -> list[str]:
@@ -32,7 +37,7 @@ class Settings(BaseSettings):
 
     @property
     def gemini_enabled(self) -> bool:
-        return bool(self.gemini_api_key.strip())
+        return bool((self.gemini_api_key or self.google_api_key).strip())
 
 
 settings = Settings()

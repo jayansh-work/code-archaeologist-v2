@@ -22,6 +22,18 @@ export default function EvidencePanel({
   onRetry,
 }: EvidencePanelProps) {
   const unavailable = result.mode === "ai-unavailable" && !result.ai_used;
+  const unavailableTitle =
+    result.unavailable_reason === "not_configured"
+      ? "AI investigation is not configured."
+      : result.unavailable_reason === "invalid_key"
+        ? "Gemini rejected the API key."
+        : "AI investigation is temporarily unavailable.";
+  const unavailableBody =
+    result.unavailable_reason === "not_configured"
+      ? "Paste GEMINI_API_KEY into backend/.env, then retry. Restart is not required. Repository evidence remains available below."
+      : result.unavailable_reason === "invalid_key"
+        ? "Check GEMINI_API_KEY in backend/.env. Repository evidence remains available below."
+        : "Repository evidence remains available below.";
 
   return (
     <section className="finding" aria-labelledby="finding-heading">
@@ -30,16 +42,8 @@ export default function EvidencePanel({
       </h2>
       {unavailable ? (
         <div className="error-box" role="status">
-          <p>
-            {result.unavailable_reason === "not_configured"
-              ? "AI investigation is not configured."
-              : "AI investigation is temporarily unavailable."}
-          </p>
-          <p>
-            {result.unavailable_reason === "not_configured"
-              ? "Add GEMINI_API_KEY to backend/.env, restart the API, then retry. Repository evidence remains available below."
-              : "Repository evidence remains available below."}
-          </p>
+          <p>{unavailableTitle}</p>
+          <p>{unavailableBody}</p>
           <button className="ghost-btn" type="button" onClick={onRetry} disabled={loading}>
             Retry
           </button>

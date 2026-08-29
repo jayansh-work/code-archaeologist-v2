@@ -61,6 +61,9 @@ STOPWORDS = {
     "who",
     "why",
     "with",
+    "work",
+    "working",
+    "works",
     "you",
 }
 
@@ -222,6 +225,9 @@ def _intent(question: str) -> str:
             "how did this evolve",
             "explain the evolution",
             "how this began",
+            "how does this repository work",
+            "how does this repo work",
+            "how does this work",
         )
     ):
         return "overview"
