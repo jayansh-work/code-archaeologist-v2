@@ -114,51 +114,61 @@ def _call_gemini(system: str, user: str) -> tuple[dict[str, object] | str | None
     key = _api_key()
     if not key:
         return None, "not_configured"
-    body = {
-        "system_instruction": {"parts": [{"text": system}]},
-        "contents": [{"role": "user", "parts": [{"text": user}]}],
-        "generationConfig": {
+    last_reason = "provider_error"
+    configs = [
+        {
             "temperature": 0.2,
-            "maxOutputTokens": 700,
+            "maxOutputTokens": 4096,
+            "responseMimeType": "application/json",
+            "thinkingConfig": {"thinkingBudget": 0},
+        },
+        {
+            "temperature": 0.2,
+            "maxOutputTokens": 4096,
             "responseMimeType": "application/json",
         },
-    }
-    last_reason = "provider_error"
+    ]
     for model in _models_to_try(_preferred_model()):
         url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
-        try:
-            with httpx.Client(timeout=settings.gemini_timeout_seconds) as client:
-                result = client.post(
-                    url,
-                    headers={
-                        "x-goog-api-key": key,
-                        "Content-Type": "application/json",
-                    },
-                    json=body,
-                )
-            if result.status_code in {401, 403}:
-                return None, "invalid_key"
-            if result.status_code == 404:
+        for generation in configs:
+            body = {
+                "system_instruction": {"parts": [{"text": system}]},
+                "contents": [{"role": "user", "parts": [{"text": user}]}],
+                "generationConfig": generation,
+            }
+            try:
+                with httpx.Client(timeout=settings.gemini_timeout_seconds) as client:
+                    result = client.post(
+                        url,
+                        headers={
+                            "x-goog-api-key": key,
+                            "Content-Type": "application/json",
+                        },
+                        json=body,
+                    )
+                if result.status_code in {401, 403}:
+                    return None, "invalid_key"
+                if result.status_code == 404:
+                    last_reason = "provider_error"
+                    break
+                if result.status_code >= 400:
+                    last_reason = "provider_error"
+                    continue
+                data = result.json()
+                candidates = data.get("candidates") or []
+                if not candidates:
+                    last_reason = "provider_error"
+                    continue
+                parts = (candidates[0].get("content") or {}).get("parts") or []
+                text = "".join(str(part.get("text") or "") for part in parts).strip()
+                if not text:
+                    last_reason = "provider_error"
+                    continue
+                parsed = _parse_json_object(text)
+                return (parsed if parsed is not None else text), None
+            except (httpx.HTTPError, ValueError, KeyError):
                 last_reason = "provider_error"
                 continue
-            if result.status_code >= 400:
-                last_reason = "provider_error"
-                continue
-            data = result.json()
-            candidates = data.get("candidates") or []
-            if not candidates:
-                last_reason = "provider_error"
-                continue
-            parts = (candidates[0].get("content") or {}).get("parts") or []
-            text = "".join(part.get("text", "") for part in parts).strip()
-            if not text:
-                last_reason = "provider_error"
-                continue
-            parsed = _parse_json_object(text)
-            return (parsed if parsed is not None else text), None
-        except (httpx.HTTPError, ValueError, KeyError):
-            last_reason = "provider_error"
-            continue
     return None, last_reason
 
 

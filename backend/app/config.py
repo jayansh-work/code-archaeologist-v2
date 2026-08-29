@@ -29,7 +29,7 @@ class Settings(BaseSettings):
     gemini_api_key: str = ""
     google_api_key: str = ""
     gemini_model: str = "gemini-3.5-flash"
-    gemini_timeout_seconds: int = 30
+    gemini_timeout_seconds: int = 45
 
     @property
     def allowed_origins(self) -> list[str]:
