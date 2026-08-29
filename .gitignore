@@ -1,0 +1,54 @@
+# Dependencies
+node_modules/
+
+# Next.js
+.next/
+out/
+
+# Python
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+coverage.xml
+
+# Environment / secrets
+.env
+.env.*
+!.env.example
+
+# Build artifacts
+dist/
+build/
+coverage/
+
+# Temporary cloned repositories / analysis workspaces
+tmp/
+temp/
+*.tmp/
+
+# OS
+Thumbs.db
+Desktop.ini
+.DS_Store
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Logs
+*.log
+npm-debug.log*
+
+# Test / tooling caches
+.turbo/
+.eslintcache
