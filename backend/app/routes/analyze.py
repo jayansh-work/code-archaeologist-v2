@@ -2,10 +2,12 @@ from uuid import uuid4
 
 from fastapi import APIRouter
 
+from app.config import settings
 from app.models import AnalyzeRequest, AnalyzeResponse
 from app.services.analysis_store import StoredAnalysis
 from app.services.git_analyzer import analyze_repository
 from app.services.github_url import parse_github_repo_url
+from app.services.notes import build_deterministic_notes
 from app.store import store
 
 router = APIRouter()
@@ -29,4 +31,5 @@ def analyze(payload: AnalyzeRequest) -> AnalyzeResponse:
         repository=repository,
         summary=summary,
         commits=commits,
+        notes=build_deterministic_notes(commits, settings.max_commits),
     )

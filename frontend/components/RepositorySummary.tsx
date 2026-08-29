@@ -34,7 +34,7 @@ export default function RepositorySummary({ analysis }: { analysis: AnalyzeRespo
           </dd>
         </div>
       </dl>
-      <p className="form-hint">{summary.history_window}. These figures are not whole-repository totals.</p>
+      <p className="form-hint">{summary.history_window}</p>
     </section>
   );
 }

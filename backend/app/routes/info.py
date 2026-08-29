@@ -13,10 +13,13 @@ def info() -> InfoResponse:
         "commit-history",
         "changed-files",
         "diff-statistics",
+        "evidence-retrieval",
         "repository-query",
+        "evolution-graph",
+        "archaeologist-notes",
     ]
     if settings.gemini_enabled:
-        capabilities.append("optional-grounded-ai")
+        capabilities.append("evidence-grounded-ai")
     return InfoResponse(
         name=settings.app_name,
         version=settings.app_version,

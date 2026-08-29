@@ -9,28 +9,25 @@ export default function HowItWorksPage() {
         <p className="kicker">Software forensics</p>
         <h1>How it works</h1>
         <p>
-          Code Archaeologist reconstructs recent Git history from a public GitHub repository and
-          makes that evidence searchable. It does not invent commits, authors, or intent.
+          Code Archaeologist is a repository investigation environment. It reconstructs recent Git history,
+          visualizes how the repository evolved, then lets you ask evidence-grounded questions.
         </p>
         <h2>1. Excavate</h2>
         <p>
-          Paste a public GitHub URL and analyze the repository. The backend validates the URL, clones
-          a shallow copy into a temporary directory, reads commit metadata with the Git CLI, then
-          deletes the clone.
+          Paste a public GitHub URL. The backend validates it, clones a shallow copy, reads commit
+          metadata with the Git CLI, then deletes the clone.
         </p>
-        <h2>2. Investigate</h2>
+        <h2>2. Visualize</h2>
         <p>
-          After analysis, ask questions about the current session. Questions run against the stored
-          evidence — they do not clone the repository again.
+          The investigation workspace shows a repository evolution graph of the analyzed commits.
+          Selecting a node reveals author, timestamp, files, and diff statistics.
         </p>
-        <h2>What you can ask</h2>
-        <ul>
-          <li>Which files changed the most?</li>
-          <li>Who contributed the most in the analyzed history?</li>
-          <li>What are the largest commits?</li>
-          <li>Show commits involving a file or keyword</li>
-          <li>Look up a commit hash from the analyzed window</li>
-        </ul>
+        <h2>3. Investigate</h2>
+        <p>
+          Ask Code Archaeologist in natural language. The API retrieves relevant commits first, then
+          Gemini explains only that evidence when an API key is configured. Findings stay linked to
+          real hashes.
+        </p>
         <h2>Limits</h2>
         <p>
           Analysis covers the latest 30 commits. Git history can show what changed, when, and who

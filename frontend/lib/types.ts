@@ -34,11 +34,21 @@ export type AnalysisSummary = {
   history_window: string;
 };
 
+export type ArchaeologistNote = {
+  kind: string;
+  title: string;
+  body: string;
+  ai_generated: boolean;
+  commit_hash: string | null;
+  file_path: string | null;
+};
+
 export type AnalyzeResponse = {
   analysis_id: string;
   repository: RepositoryInfo;
   summary: AnalysisSummary;
   commits: CommitEvidence[];
+  notes: ArchaeologistNote[];
 };
 
 export type EvidenceItem = {
@@ -59,8 +69,16 @@ export type QueryResponse = {
   answer: string;
   evidence: EvidenceItem[];
   ai_used: boolean;
+  ai_available: boolean;
+  confidence: string | null;
+  why: string | null;
+  related_commits: string[];
+  related_files: string[];
+  follow_ups: string[];
+  retrieval_summary: string;
 };
 
-export type ApiError = {
-  detail: string;
+export type NotesResponse = {
+  notes: ArchaeologistNote[];
+  ai_used: boolean;
 };

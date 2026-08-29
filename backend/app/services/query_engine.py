@@ -156,6 +156,10 @@ def _intent(question: str) -> str:
             "busiest files",
             "which files changed",
             "files with the most",
+            "hotspot",
+            "hotspots",
+            "most frequently changed",
+            "most active",
         )
     ):
         return "most_changed_files"
@@ -167,6 +171,10 @@ def _intent(question: str) -> str:
             "most additions",
             "highest churn",
             "largest changes",
+            "most important",
+            "important change",
+            "architectural",
+            "refactor",
         )
     ):
         return "largest_commits"
@@ -574,7 +582,56 @@ _HANDLERS = {
 }
 
 
-def answer_question(analysis: StoredAnalysis, question: str) -> QueryResponse:
+def _merge_focus(
+    analysis: StoredAnalysis,
+    result: QueryResponse,
+    focus_hashes: list[str] | None,
+    focus_file: str | None,
+) -> QueryResponse:
+    extra: list[EvidenceItem] = []
+    seen = {item.hash for item in result.evidence}
+    needles = [token.lower() for token in (focus_hashes or []) if token]
+    if needles:
+        for commit in analysis.commits:
+            if commit.hash in seen:
+                continue
+            hay = commit.hash.lower()
+            if any(hay.startswith(token) or commit.short_hash.lower() == token for token in needles):
+                extra.append(_to_evidence(commit, note="Selected in the investigation"))
+                seen.add(commit.hash)
+    if focus_file:
+        needle = focus_file.lower()
+        for commit in analysis.commits:
+            if commit.hash in seen:
+                continue
+            if any(needle in item.path.lower() for item in commit.files):
+                extra.append(_to_evidence(commit, note=focus_file))
+                seen.add(commit.hash)
+            if len(extra) >= 8:
+                break
+    merged = extra + result.evidence
+    related_files: list[str] = []
+    for item in merged:
+        for path in item.files:
+            if path not in related_files:
+                related_files.append(path)
+    return result.model_copy(
+        update={
+            "evidence": merged[:12],
+            "retrieval_summary": result.answer,
+            "related_commits": [item.short_hash for item in merged[:8]],
+            "related_files": related_files[:12],
+        }
+    )
+
+
+def answer_question(
+    analysis: StoredAnalysis,
+    question: str,
+    focus_hashes: list[str] | None = None,
+    focus_file: str | None = None,
+) -> QueryResponse:
     intent = _intent(question)
     handler = _HANDLERS.get(intent, _keyword_search)
-    return handler(analysis, question)
+    result = handler(analysis, question)
+    return _merge_focus(analysis, result, focus_hashes, focus_file)

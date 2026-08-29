@@ -1,8 +1,9 @@
 import { site } from "@/lib/site";
-import type { AnalyzeResponse, QueryResponse } from "@/lib/types";
+import type { AnalyzeResponse, NotesResponse, QueryResponse } from "@/lib/types";
 
 const ANALYZE_TIMEOUT_MS = 90_000;
-const QUERY_TIMEOUT_MS = 30_000;
+const QUERY_TIMEOUT_MS = 35_000;
+const NOTES_TIMEOUT_MS = 35_000;
 
 async function readError(response: Response): Promise<string> {
   try {
@@ -71,13 +72,31 @@ export function analyzeRepository(repoUrl: string): Promise<AnalyzeResponse> {
 export function queryRepository(
   analysisId: string,
   question: string,
+  selectedHash?: string | null,
+  selectedFile?: string | null,
 ): Promise<QueryResponse> {
   return request<QueryResponse>(
     "/query",
     {
       method: "POST",
-      body: JSON.stringify({ analysis_id: analysisId, question }),
+      body: JSON.stringify({
+        analysis_id: analysisId,
+        question,
+        selected_hash: selectedHash || undefined,
+        selected_file: selectedFile || undefined,
+      }),
     },
     QUERY_TIMEOUT_MS,
+  );
+}
+
+export function fetchAiNotes(analysisId: string): Promise<NotesResponse> {
+  return request<NotesResponse>(
+    "/notes",
+    {
+      method: "POST",
+      body: JSON.stringify({ analysis_id: analysisId }),
+    },
+    NOTES_TIMEOUT_MS,
   );
 }

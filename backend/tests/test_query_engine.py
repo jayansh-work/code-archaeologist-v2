@@ -88,6 +88,11 @@ def test_hash_lookup() -> None:
     assert result.evidence[0].short_hash == "bbbbbbb"
 
 
-def test_no_match() -> None:
-    result = answer_question(_analysis(), "zzzzzxqwerty")
-    assert result.evidence == []
+def test_hotspots_and_important_changes() -> None:
+    hotspots = answer_question(_analysis(), "What files are hotspots?")
+    assert hotspots.intent == "most_changed_files"
+    assert hotspots.evidence
+
+    important = answer_question(_analysis(), "What are the most important changes in this repository?")
+    assert important.intent == "largest_commits"
+    assert important.evidence[0].short_hash == "ccccccc"

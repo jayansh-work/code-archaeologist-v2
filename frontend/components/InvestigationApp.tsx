@@ -1,7 +1,10 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import dynamic from "next/dynamic";
+import { useMemo, useRef, useState } from "react";
 
+import ArchaeologistNotes from "@/components/ArchaeologistNotes";
+import CommitDetailsPanel from "@/components/CommitDetailsPanel";
 import CommitHistory from "@/components/CommitHistory";
 import EvidencePanel from "@/components/EvidencePanel";
 import FocusPoints from "@/components/FocusPoints";
@@ -11,9 +14,11 @@ import RepositoryForm from "@/components/RepositoryForm";
 import RepositoryQuery from "@/components/RepositoryQuery";
 import RepositorySummary from "@/components/RepositorySummary";
 import TeamCredits from "@/components/TeamCredits";
-import { analyzeRepository, queryRepository } from "@/lib/api";
-import type { AnalyzeResponse, QueryResponse } from "@/lib/types";
+import { analyzeRepository, fetchAiNotes, queryRepository } from "@/lib/api";
+import type { ArchaeologistNote, AnalyzeResponse, CommitEvidence, QueryResponse } from "@/lib/types";
 import { validateGithubRepoUrl } from "@/lib/validation";
+
+const EvolutionGraph = dynamic(() => import("@/components/EvolutionGraph"), { ssr: false });
 
 type Status = "idle" | "loading" | "success" | "error";
 type QueryStatus = "idle" | "loading" | "success" | "error";
@@ -23,14 +28,36 @@ export default function InvestigationApp() {
   const [status, setStatus] = useState<Status>("idle");
   const [error, setError] = useState<string | null>(null);
   const [analysis, setAnalysis] = useState<AnalyzeResponse | null>(null);
+  const [notes, setNotes] = useState<ArchaeologistNote[]>([]);
+  const [notesLoading, setNotesLoading] = useState(false);
   const [question, setQuestion] = useState("");
   const [queryStatus, setQueryStatus] = useState<QueryStatus>("idle");
   const [queryError, setQueryError] = useState<string | null>(null);
   const [queryResult, setQueryResult] = useState<QueryResponse | null>(null);
   const [selectedHash, setSelectedHash] = useState<string | null>(null);
-  const inFlight = useRef(false);
+  const [fileFilter, setFileFilter] = useState("");
+  const [showAnother, setShowAnother] = useState(false);
+  const analyzeLock = useRef(false);
+  const queryLock = useRef(false);
+  const lastQuestion = useRef("");
 
   const repoLabel = analysis ? `${analysis.repository.owner}/${analysis.repository.name}` : undefined;
+
+  function resolveCommitHash(hash: string): string | null {
+    if (!analysis) {
+      return null;
+    }
+    const needle = hash.toLowerCase();
+    const found = analysis.commits.find(
+      (commit) =>
+        commit.hash.toLowerCase() === needle ||
+        commit.short_hash.toLowerCase() === needle ||
+        commit.hash.toLowerCase().startsWith(needle),
+    );
+    return found?.hash ?? null;
+  }
+
+  const selectedCommit = analysis?.commits.find((commit) => commit.hash === selectedHash) ?? null;
 
   const liveMessage = useMemo(() => {
     if (status === "loading") {
@@ -43,21 +70,31 @@ export default function InvestigationApp() {
       return "Repository analysis complete";
     }
     if (queryStatus === "loading") {
-      return "Searching analyzed history";
+      return "Investigating repository history";
     }
     return "";
   }, [status, error, queryStatus]);
 
-  useEffect(() => {
-    if (!selectedHash) {
-      return;
+  function selectCommit(hash: string | null, scrollHistory = false) {
+    const resolved = hash ? resolveCommitHash(hash) ?? hash : null;
+    setSelectedHash(resolved);
+    if (resolved && scrollHistory) {
+      requestAnimationFrame(() => {
+        document.getElementById(`commit-${resolved}`)?.scrollIntoView({
+          block: "nearest",
+          behavior: "smooth",
+        });
+      });
     }
-    const node = document.getElementById(`commit-${selectedHash}`);
-    node?.scrollIntoView({ block: "center", behavior: "smooth" });
-  }, [selectedHash]);
+  }
+
+  function askAboutFile(path: string) {
+    setFileFilter(path);
+    void runQuery(`Summarize the evolution of ${path}.`, null, path);
+  }
 
   async function runAnalyze() {
-    if (inFlight.current) {
+    if (analyzeLock.current) {
       return;
     }
     const invalid = validateGithubRepoUrl(repoUrl);
@@ -66,57 +103,85 @@ export default function InvestigationApp() {
       setError(invalid);
       return;
     }
-    inFlight.current = true;
+    analyzeLock.current = true;
     setStatus("loading");
     setError(null);
     setQueryResult(null);
     setQueryError(null);
     setQueryStatus("idle");
     setSelectedHash(null);
+    setFileFilter("");
+    setNotes([]);
     try {
       const result = await analyzeRepository(repoUrl.trim());
       setAnalysis(result);
+      setNotes(result.notes);
       setStatus("success");
+      setShowAnother(false);
+      setNotesLoading(true);
+      void fetchAiNotes(result.analysis_id)
+        .then((extra) => {
+          if (extra.notes.length > 0) {
+            setNotes((current) => [...current, ...extra.notes]);
+          }
+        })
+        .catch(() => {
+          // Deterministic notes already shown.
+        })
+        .finally(() => setNotesLoading(false));
     } catch (caught) {
-      setAnalysis(null);
-      setStatus("error");
       setError(caught instanceof Error ? caught.message : "Repository could not be analyzed.");
+      if (!analysis) {
+        setAnalysis(null);
+        setStatus("error");
+      } else {
+        setStatus("success");
+      }
     } finally {
-      inFlight.current = false;
+      analyzeLock.current = false;
     }
   }
 
-  async function runQuery(raw: string) {
-    if (!analysis || inFlight.current) {
+  async function runQuery(raw: string, contextCommit?: CommitEvidence | null, contextFile?: string) {
+    if (!analysis || queryLock.current) {
       return;
     }
     const nextQuestion = raw.trim();
     if (!nextQuestion) {
       setQueryStatus("error");
-      setQueryError("Enter a question about this repository's history.");
+      setQueryError("Enter a question about this repository.");
       return;
     }
-    inFlight.current = true;
+    queryLock.current = true;
+    lastQuestion.current = nextQuestion;
     setQuestion(nextQuestion);
     setQueryStatus("loading");
     setQueryError(null);
     try {
-      const result = await queryRepository(analysis.analysis_id, nextQuestion);
+      const result = await queryRepository(
+        analysis.analysis_id,
+        nextQuestion,
+        contextCommit?.hash ?? selectedHash,
+        contextFile ?? (fileFilter || undefined),
+      );
       setQueryResult(result);
       setQueryStatus("success");
+      requestAnimationFrame(() => {
+        document.getElementById("finding-heading")?.scrollIntoView({ block: "start" });
+      });
     } catch (caught) {
       setQueryStatus("error");
       setQueryError(
         caught instanceof Error
           ? caught.message
-          : "The question could not be answered. Analyze the repository again if the session expired.",
+          : "The investigation could not be completed. Analyze the repository again if the session expired.",
       );
     } finally {
-      inFlight.current = false;
+      queryLock.current = false;
     }
   }
 
-  const workspace = status === "success" && analysis;
+  const workspace = analysis !== null;
 
   return (
     <>
@@ -135,12 +200,14 @@ export default function InvestigationApp() {
           Explore how a codebase evolved through real commits, changed files, authors, timestamps, and diffs.
         </p>
 
-        <RepositoryForm
-          value={repoUrl}
-          disabled={status === "loading"}
-          onChange={setRepoUrl}
-          onSubmit={runAnalyze}
-        />
+        <div className="landing-form">
+          <RepositoryForm
+            value={repoUrl}
+            disabled={status === "loading"}
+            onChange={setRepoUrl}
+            onSubmit={runAnalyze}
+          />
+        </div>
 
         <div className="status-live" aria-live="polite">
           {liveMessage}
@@ -165,33 +232,99 @@ export default function InvestigationApp() {
 
         {workspace ? (
           <>
+            <div className="workspace-toolbar">
+              <p className="form-hint">{analysis.summary.history_window}. These figures are not whole-repository totals.</p>
+              <button className="link-btn" type="button" onClick={() => setShowAnother((value) => !value)}>
+                Analyze another repository
+              </button>
+            </div>
+            {showAnother ? (
+              <RepositoryForm
+                value={repoUrl}
+                disabled={status === "loading"}
+                onChange={setRepoUrl}
+                onSubmit={runAnalyze}
+              />
+            ) : null}
             <RepositorySummary analysis={analysis} />
             <RepositoryQuery
               value={question}
               disabled={queryStatus === "loading"}
               onChange={setQuestion}
-              onSubmit={runQuery}
+              onSubmit={(next) => void runQuery(next)}
             />
             {queryStatus === "loading" ? (
               <div className="status" role="status">
-                <p className="loading-copy">Searching analyzed history…</p>
+                <p className="loading-copy">Investigating repository history…</p>
+                <p className="loading-sub">Tracing relevant evidence…</p>
               </div>
             ) : null}
             {queryStatus === "error" && queryError ? (
               <div className="error-box" role="alert">
                 <p>{queryError}</p>
+                <button className="ghost-btn" type="button" onClick={() => void runQuery(lastQuestion.current)}>
+                  Retry
+                </button>
               </div>
             ) : null}
             {queryResult ? (
               <EvidencePanel
                 result={queryResult}
-                onSelectHash={(hash) => setSelectedHash(hash)}
+                loading={queryStatus === "loading"}
+                onSelectHash={(hash) => selectCommit(hash, true)}
+                onSelectFile={setFileFilter}
+                onAsk={(next) => void runQuery(next)}
+                onRetry={() => void runQuery(lastQuestion.current)}
               />
             ) : null}
+
+            <section className="evolution" aria-labelledby="evolution-heading">
+              <h2 id="evolution-heading" className="section-title">
+                Repository evolution
+              </h2>
+              <p className="form-hint">Older commits are at the top. Newer commits are at the bottom.</p>
+              <div className="evolution-layout">
+                <EvolutionGraph
+                  commits={analysis.commits}
+                  selectedHash={selectedHash}
+                  onSelectHash={(hash) => selectCommit(hash)}
+                />
+                <CommitDetailsPanel
+                  commit={selectedCommit}
+                  onAsk={(commit) => {
+                    selectCommit(commit.hash);
+                    void runQuery(
+                      `Explain what changed in commit ${commit.short_hash} and why the history suggests those changes were made.`,
+                      commit,
+                    );
+                  }}
+                  onAskFile={askAboutFile}
+                  onSelectFile={setFileFilter}
+                />
+              </div>
+            </section>
+
+            <ArchaeologistNotes
+              notes={notes}
+              loadingAi={notesLoading}
+              onSelectHash={(hash) => selectCommit(hash, true)}
+              onSelectFile={setFileFilter}
+            />
+
             <CommitHistory
               commits={analysis.commits}
               selectedHash={selectedHash}
-              onSelectHash={setSelectedHash}
+              fileFilter={fileFilter}
+              onFileFilterChange={setFileFilter}
+              onSelectHash={(hash) => selectCommit(hash)}
+              onAsk={(commit) => {
+                selectCommit(commit.hash);
+                void runQuery(
+                  `Explain this commit ${commit.short_hash} to someone new to the codebase.`,
+                  commit,
+                );
+              }}
+              onAskFile={askAboutFile}
             />
           </>
         ) : (

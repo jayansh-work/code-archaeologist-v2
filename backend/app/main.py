@@ -4,7 +4,7 @@ from fastapi.responses import JSONResponse
 
 from app.config import settings
 from app.exceptions import ArchaeologistError
-from app.routes import analyze, health, info, query
+from app.routes import analyze, health, info, notes, query
 
 app = FastAPI(
     title="Code Archaeologist",
@@ -25,6 +25,7 @@ app.include_router(health.router)
 app.include_router(info.router)
 app.include_router(analyze.router)
 app.include_router(query.router)
+app.include_router(notes.router)
 
 
 @app.exception_handler(ArchaeologistError)

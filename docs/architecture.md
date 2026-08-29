@@ -19,11 +19,11 @@ Structured Evidence
     ↓
 Analysis Session Store
     ↓
-Repository Query Engine
+Evidence retrieval
     ↓
-Optional Grounded AI
+Optional grounded Gemini
     ↓
-Frontend Investigation View
+Evolution graph + notes + investigation view
 ```
 
 ## Why Git CLI is used
@@ -49,7 +49,7 @@ The clone exists only long enough to extract structured evidence. It lives in a 
 
 ## Analysis sessions
 
-Each successful analysis returns an `analysis_id`. The API keeps repository metadata, summary statistics, and commit evidence in an in-memory store with a TTL (45 minutes) and a maximum session count. Restarting the API clears sessions. Expired IDs return a message asking the user to analyze again.
+Each successful analysis returns an `analysis_id`. The API keeps repository metadata, summary statistics, commit evidence, and a short investigation history in memory and writes the same payload to `tmp/sessions`. Reloading the API does not drop a live investigation. Sessions still expire after 45 minutes and are capped by `max_sessions`. Expired IDs return a message asking the user to analyze again.
 
 ## Why queries do not reclone
 
@@ -59,7 +59,7 @@ Each successful analysis returns an `analysis_id`. The API keeps repository meta
 
 The query engine matches questions to intents (most-changed files, largest commits, contributors, recent activity, file history, author search, hash lookup, keyword search). Answers include the supporting commits.
 
-If `GEMINI_API_KEY` is set, Gemini may rewrite the answer using only the retrieved evidence JSON. It is not given the whole repository. If the key is missing or the model call fails, deterministic search still works.
+If `GEMINI_API_KEY` is set, Gemini may rewrite the answer using only the retrieved evidence JSON. It is not given the whole repository. If the key is missing or the model call fails, the investigation bar reports that AI is temporarily unavailable while retrieved Git evidence remains visible. The evolution graph and commit history stay usable.
 
 ## Limitation of recent-commit analysis
 

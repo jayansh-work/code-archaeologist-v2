@@ -1,8 +1,8 @@
 const SUGGESTIONS = [
-  "Which files changed the most?",
-  "Show recent activity",
-  "Largest commits",
-  "Who contributed the most?",
+  "Explain recent changes",
+  "Find architectural shifts",
+  "What files are hotspots?",
+  "Why did this area change?",
 ];
 
 type RepositoryQueryProps = {
@@ -20,40 +20,49 @@ export default function RepositoryQuery({
 }: RepositoryQueryProps) {
   return (
     <section className="query-block" aria-labelledby="query-heading">
-      <h2 id="query-heading">Ask the repository</h2>
+      <h2 id="query-heading" className="section-title">
+        Ask Code Archaeologist
+      </h2>
       <form
         onSubmit={(event) => {
           event.preventDefault();
           onSubmit(value);
         }}
       >
-        <label className="field-label" htmlFor="repo-question">
-          Question
+        <label className="status-live" htmlFor="repo-question">
+          Ask anything about this repository
         </label>
-        <div className="form-row">
+        <div className="ask-row">
           <input
             id="repo-question"
             name="question"
             type="text"
-            placeholder="Ask about this repository's history..."
+            placeholder="Ask anything about this repository..."
             value={value}
             disabled={disabled}
             onChange={(event) => onChange(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === "Escape") {
+                onChange("");
+              }
+            }}
           />
-          <button className="primary-btn" type="submit" disabled={disabled}>
-            {disabled ? "Searching…" : "Ask"}
+          <button className="ask-btn" type="submit" disabled={disabled} aria-label="Investigate">
+            →
           </button>
         </div>
       </form>
+      <p className="form-hint">Suggested investigations</p>
       <div className="suggestions">
         {SUGGESTIONS.map((item) => (
           <button
             key={item}
+            className="chip"
             type="button"
             disabled={disabled}
             onClick={() => onSubmit(item)}
           >
-            {item.replace(/\?$/, "")}
+            {item}
           </button>
         ))}
       </div>

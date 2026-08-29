@@ -10,13 +10,21 @@ type SortMode = "recent" | "largest";
 type CommitHistoryProps = {
   commits: CommitEvidence[];
   selectedHash: string | null;
+  fileFilter: string;
+  onFileFilterChange: (value: string) => void;
   onSelectHash: (hash: string | null) => void;
+  onAsk: (commit: CommitEvidence) => void;
+  onAskFile: (path: string) => void;
 };
 
 export default function CommitHistory({
   commits,
   selectedHash,
+  fileFilter,
+  onFileFilterChange,
   onSelectHash,
+  onAsk,
+  onAskFile,
 }: CommitHistoryProps) {
   const [search, setSearch] = useState("");
   const [author, setAuthor] = useState("all");
@@ -29,9 +37,15 @@ export default function CommitHistory({
 
   const visible = useMemo(() => {
     const needle = search.trim().toLowerCase();
+    const fileNeedle = fileFilter.trim().toLowerCase();
     let next = commits;
     if (author !== "all") {
       next = next.filter((commit) => commit.author === author);
+    }
+    if (fileNeedle) {
+      next = next.filter((commit) =>
+        commit.files.some((file) => file.path.toLowerCase().includes(fileNeedle)),
+      );
     }
     if (needle) {
       next = next.filter((commit) => {
@@ -53,12 +67,14 @@ export default function CommitHistory({
       );
     }
     return next;
-  }, [commits, search, author, sort]);
+  }, [commits, search, author, sort, fileFilter]);
 
   return (
     <section aria-labelledby="history-heading">
       <div className="history-head">
-        <h2 id="history-heading">Commit history</h2>
+        <h2 id="history-heading" className="section-title">
+          Evidence / commit history
+        </h2>
         <div className="history-controls">
           <label className="status-live" htmlFor="history-search">
             Search commit history
@@ -67,7 +83,16 @@ export default function CommitHistory({
             id="history-search"
             value={search}
             onChange={(event) => setSearch(event.target.value)}
-            placeholder="Search message, file, author, hash"
+            placeholder="Search message, author, hash"
+          />
+          <label className="status-live" htmlFor="history-file">
+            File filter
+          </label>
+          <input
+            id="history-file"
+            value={fileFilter}
+            onChange={(event) => onFileFilterChange(event.target.value)}
+            placeholder="File path"
           />
           <label className="status-live" htmlFor="history-author">
             Author
@@ -107,6 +132,9 @@ export default function CommitHistory({
               commit={commit}
               open={selectedHash === commit.hash}
               onToggle={() => onSelectHash(selectedHash === commit.hash ? null : commit.hash)}
+              onAsk={() => onAsk(commit)}
+              onAskFile={onAskFile}
+              onSelectFile={onFileFilterChange}
             />
           ))}
         </ul>

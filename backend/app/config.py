@@ -18,6 +18,7 @@ class Settings(BaseSettings):
 
     session_ttl_seconds: int = 45 * 60
     max_sessions: int = 24
+    session_dir: str = "tmp/sessions"
 
     cors_origins: str = "http://localhost:3000,http://127.0.0.1:3000"
 

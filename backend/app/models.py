@@ -12,11 +12,30 @@ class AnalyzeRequest(BaseModel):
 
 class QueryRequest(BaseModel):
     analysis_id: str = Field(..., min_length=8, max_length=80)
-    question: str = Field(..., min_length=1, max_length=500)
+    question: str = Field(..., min_length=1, max_length=800)
+    selected_hash: str | None = Field(default=None, max_length=80)
+    selected_file: str | None = Field(default=None, max_length=400)
 
     @field_validator("analysis_id", "question")
     @classmethod
     def strip_text(cls, value: str) -> str:
+        return value.strip()
+
+    @field_validator("selected_hash", "selected_file")
+    @classmethod
+    def strip_optional(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        text = value.strip()
+        return text or None
+
+
+class NotesRequest(BaseModel):
+    analysis_id: str = Field(..., min_length=8, max_length=80)
+
+    @field_validator("analysis_id")
+    @classmethod
+    def strip_id(cls, value: str) -> str:
         return value.strip()
 
 
@@ -56,11 +75,21 @@ class AnalysisSummary(BaseModel):
     history_window: str
 
 
+class ArchaeologistNote(BaseModel):
+    kind: str
+    title: str
+    body: str
+    ai_generated: bool = False
+    commit_hash: str | None = None
+    file_path: str | None = None
+
+
 class AnalyzeResponse(BaseModel):
     analysis_id: str
     repository: RepositoryInfo
     summary: AnalysisSummary
     commits: list[CommitEvidence]
+    notes: list[ArchaeologistNote]
 
 
 class EvidenceItem(BaseModel):
@@ -81,6 +110,18 @@ class QueryResponse(BaseModel):
     answer: str
     evidence: list[EvidenceItem]
     ai_used: bool = False
+    ai_available: bool = False
+    confidence: str | None = None
+    why: str | None = None
+    related_commits: list[str] = Field(default_factory=list)
+    related_files: list[str] = Field(default_factory=list)
+    follow_ups: list[str] = Field(default_factory=list)
+    retrieval_summary: str = ""
+
+
+class NotesResponse(BaseModel):
+    notes: list[ArchaeologistNote]
+    ai_used: bool
 
 
 class HealthResponse(BaseModel):

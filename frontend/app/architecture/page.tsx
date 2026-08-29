@@ -14,35 +14,24 @@ Next.js
     ↓
 FastAPI
     ↓
-Git Analyzer
+Git Analyzer → temporary clone → Git CLI
     ↓
-Temporary Clone
+Structured evidence + session store
     ↓
-Git CLI
+Evidence retrieval
     ↓
-Structured Evidence
+Optional grounded Gemini
     ↓
-Analysis Session Store
-    ↓
-Repository Query Engine
-    ↓
-Optional Grounded AI
-    ↓
-Investigation view`}</pre>
-        <h2>Why Git CLI</h2>
+Evolution graph + notes + investigation view`}</pre>
+        <h2>Evidence first</h2>
         <p>
-          Git is the source of truth for history. Calling Git with argument arrays avoids shell
-          injection and keeps extraction aligned with what developers already trust.
+          Questions run against stored analysis. The repository is not cloned again. Retrieval
+          selects relevant commits before any model call.
         </p>
-        <h2>Temporary clones</h2>
+        <h2>If AI is unavailable</h2>
         <p>
-          Clones live in a temporary directory and are removed after analysis, including failures.
-          Query requests reuse structured evidence in memory instead of keeping repositories on disk.
-        </p>
-        <h2>Optional AI</h2>
-        <p>
-          If a Gemini API key is configured, answers may be written from retrieved evidence. Without a
-          key, deterministic repository search remains available.
+          Git analysis, the evolution graph, and commit evidence remain usable. The investigation bar
+          shows that AI is temporarily unavailable and can be retried.
         </p>
       </main>
       <Footer />

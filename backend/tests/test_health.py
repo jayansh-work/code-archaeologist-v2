@@ -22,8 +22,11 @@ def test_info_lists_implemented_capabilities() -> None:
         "commit-history",
         "changed-files",
         "diff-statistics",
+        "evidence-retrieval",
         "repository-query",
+        "evolution-graph",
+        "archaeologist-notes",
     ):
         assert capability in body["capabilities"]
     assert body["max_commits"] == 30
-    assert body["ai_enabled"] is False
+    assert isinstance(body["ai_enabled"], bool)

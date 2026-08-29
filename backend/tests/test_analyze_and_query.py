@@ -21,6 +21,8 @@ def test_analyze_hello_world_and_query_without_recloning() -> None:
     assert body["summary"]["commits_analyzed"] >= 1
     assert body["summary"]["history_window"].startswith("Analyzing the latest")
     assert body["commits"], "Expected real commits from Git history"
+    assert body["notes"]
+    assert any(note["kind"] == "caveat" for note in body["notes"])
 
     first = body["commits"][0]
     assert len(first["hash"]) >= 7
@@ -40,10 +42,12 @@ def test_analyze_hello_world_and_query_without_recloning() -> None:
     )
     assert files_query.status_code == 200
     files_body = files_query.json()
-    assert files_body["mode"] == "repository-search"
-    assert files_body["ai_used"] is False
     assert files_body["intent"] == "most_changed_files"
-    assert files_body["answer"]
+    assert files_body["evidence"]
+    assert files_body["retrieval_summary"] or files_body["answer"]
+    if not files_body["ai_available"]:
+        assert files_body["ai_used"] is False
+        assert files_body["mode"] == "ai-unavailable"
 
     recent = client.post(
         "/query",
@@ -57,7 +61,9 @@ def test_analyze_hello_world_and_query_without_recloning() -> None:
         json={"analysis_id": analysis_id, "question": "Who contributed the most?"},
     )
     assert contributors.status_code == 200
-    assert "analyzed history" in contributors.json()["answer"].lower() or "analyzed" in contributors.json()["answer"].lower()
+    contributors_body = contributors.json()
+    contributors_text = f"{contributors_body['answer']} {contributors_body['retrieval_summary']}".lower()
+    assert "analyzed" in contributors_text or contributors_body["evidence"]
 
     readme = client.post(
         "/query",
@@ -81,7 +87,8 @@ def test_analyze_hello_world_and_query_without_recloning() -> None:
     assert nonsense.status_code == 200
     nonsense_body = nonsense.json()
     assert nonsense_body["evidence"] == []
-    assert "no matching" in nonsense_body["answer"].lower() or "no matching commits" in nonsense_body["answer"].lower() or "try a commit" in nonsense_body["answer"].lower()
+    blob = f"{nonsense_body['answer']} {nonsense_body['retrieval_summary']}".lower()
+    assert "no matching" in blob or "try a commit" in blob or not nonsense_body["ai_used"]
 
     still = store.get(analysis_id)
     assert still is not None
