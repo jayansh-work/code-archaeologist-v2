@@ -15,6 +15,9 @@ class QueryRequest(BaseModel):
     question: str = Field(..., min_length=1, max_length=800)
     selected_hash: str | None = Field(default=None, max_length=80)
     selected_file: str | None = Field(default=None, max_length=400)
+    # Inline commit/file/butterfly explanations set this to false so they do
+    # not overwrite the main repository conversation used for follow-ups.
+    record_history: bool = True
 
     @field_validator("analysis_id", "question")
     @classmethod
@@ -128,6 +131,10 @@ class NotesResponse(BaseModel):
 class HealthResponse(BaseModel):
     status: str
     service: str
+    version: str
+    # Surfaced so scripts/doctor.ps1 can confirm AI readiness before a demo
+    # without ever touching the key itself.
+    ai_available: bool
 
 
 class InfoResponse(BaseModel):

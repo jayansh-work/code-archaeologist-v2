@@ -86,9 +86,14 @@ def test_analyze_hello_world_and_query_without_recloning() -> None:
     )
     assert nonsense.status_code == 200
     nonsense_body = nonsense.json()
-    assert nonsense_body["evidence"] == []
+    # No lexical match still returns a bounded, diverse sample of the analyzed
+    # window so the explanation layer never runs with zero evidence.
+    assert nonsense_body["evidence"], "Expected a diverse evidence fallback"
+    assert len(nonsense_body["evidence"]) <= 8
+    returned = {item["hash"] for item in nonsense_body["evidence"]}
+    assert returned.issubset(set(stored_hashes))
     blob = f"{nonsense_body['answer']} {nonsense_body['retrieval_summary']}".lower()
-    assert "no matching" in blob or "try a commit" in blob or not nonsense_body["ai_used"]
+    assert "no analyzed commit" in blob or "does not" in blob or not nonsense_body["ai_used"]
 
     still = store.get(analysis_id)
     assert still is not None

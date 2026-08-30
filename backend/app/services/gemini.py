@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import time
 from pathlib import Path
 
 import httpx
@@ -115,6 +116,9 @@ def _call_gemini(system: str, user: str) -> tuple[dict[str, object] | str | None
     if not key:
         return None, "not_configured"
     last_reason = "provider_error"
+    # Model fallbacks multiply the per-request timeout, so the whole chain runs
+    # against one wall-clock budget that stays inside the client timeout.
+    deadline = time.monotonic() + settings.gemini_total_budget_seconds
     configs = [
         {
             "temperature": 0.2,
@@ -129,15 +133,21 @@ def _call_gemini(system: str, user: str) -> tuple[dict[str, object] | str | None
         },
     ]
     for model in _models_to_try(_preferred_model()):
+        if time.monotonic() >= deadline:
+            break
         url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
         for generation in configs:
+            remaining = deadline - time.monotonic()
+            if remaining <= 1:
+                break
+            attempt_timeout = min(settings.gemini_timeout_seconds, remaining)
             body = {
                 "system_instruction": {"parts": [{"text": system}]},
                 "contents": [{"role": "user", "parts": [{"text": user}]}],
                 "generationConfig": generation,
             }
             try:
-                with httpx.Client(timeout=settings.gemini_timeout_seconds) as client:
+                with httpx.Client(timeout=attempt_timeout) as client:
                     result = client.post(
                         url,
                         headers={

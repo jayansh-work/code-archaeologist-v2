@@ -114,3 +114,32 @@ def test_how_repository_works_uses_overview() -> None:
 def test_butterfly_question_uses_butterfly_intent() -> None:
     result = answer_question(_analysis(), "What is the butterfly effect of this change?")
     assert result.intent == "butterfly"
+
+
+def test_before_commit_uses_history_order_not_timestamps() -> None:
+    analysis = _analysis()
+    # Offsets that sort the wrong way lexically, same real ordering.
+    analysis.commits[0].timestamp = "2026-08-29T01:00:00+05:30"
+    analysis.commits[1].timestamp = "2026-08-28T20:00:00-08:00"
+    result = answer_question(analysis, "What happened before commit aaaaaaa?")
+    assert result.intent == "before_commit"
+    hashes = [item.short_hash for item in result.evidence]
+    assert "aaaaaaa" not in hashes[1:]
+    assert "bbbbbbb" in hashes
+
+
+def test_unmatched_question_returns_diverse_evidence() -> None:
+    result = answer_question(_analysis(), "zzzzzxqwerty-no-such-token")
+    assert result.intent == "keyword_search"
+    assert result.evidence, "Broad questions must never reach the AI with zero evidence"
+    assert len(result.evidence) <= 8
+    assert "No analyzed commit" in result.answer
+    assert "latest commits only" in result.answer
+
+
+def test_unmatched_question_on_empty_history() -> None:
+    analysis = _analysis()
+    analysis.commits = []
+    result = answer_question(analysis, "zzzzzxqwerty-no-such-token")
+    assert result.evidence == []
+    assert "does not contain commits" in result.answer

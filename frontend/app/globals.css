@@ -370,6 +370,13 @@ button {
   margin-top: 10px;
 }
 
+.error-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 14px;
+}
+
 .focus-list {
   margin-top: 40px;
   padding-top: 20px;
@@ -555,6 +562,48 @@ button {
   flex-wrap: wrap;
   gap: 8px;
   margin-top: 10px;
+}
+
+.ask-scope {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+  min-height: 20px;
+}
+
+.ask-scope .form-hint {
+  margin: 0;
+}
+
+.scope-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 6px 3px 8px;
+  border: 1px solid var(--accent);
+  border-radius: var(--radius);
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  font-family: var(--mono);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+.scope-chip button {
+  background: transparent;
+  border: 0;
+  padding: 0 2px;
+  color: var(--text-muted);
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+  transition: color var(--ease);
+}
+
+.scope-chip button:hover {
+  color: var(--danger);
 }
 
 .chip {
@@ -797,6 +846,21 @@ button {
 .butterfly-plain {
   margin: 0 0 10px;
   color: var(--text-secondary);
+}
+
+.butterfly-group {
+  margin-top: 10px;
+}
+
+/* Later continuation is the headline direction, so it reads first. */
+.butterfly-group.is-primary {
+  border-left: 2px solid var(--accent);
+  padding-left: 10px;
+}
+
+.butterfly-group.is-primary > h4 {
+  margin-top: 4px;
+  color: var(--text-primary);
 }
 
 .wing-list {

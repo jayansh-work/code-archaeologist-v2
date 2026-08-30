@@ -1,7 +1,7 @@
 "use client";
 
 import InlineFinding from "@/components/InlineFinding";
-import { computeButterfly } from "@/lib/butterfly";
+import { BUTTERFLY_CAVEAT, computeButterfly } from "@/lib/butterfly";
 import { formatCount } from "@/lib/format";
 import { butterflySlot, fileSlot, type InlineAskState } from "@/lib/inlineAsk";
 import type { CommitEvidence } from "@/lib/types";
@@ -44,9 +44,8 @@ export default function ButterflyPanel({
     <aside className="details-panel butterfly-panel" aria-live="polite">
       <h3>Butterfly effect</h3>
       <p className="butterfly-plain">
-        A small change can spread. If later commits edit the same files, the original change did not
-        stay in one place — it rippled forward. This is Git file history, not a guess about bugs or
-        why someone made the change.
+        A small change can spread. If later saved changes edit the same files, the original change
+        did not stay isolated — its area of the codebase continued evolving. {BUTTERFLY_CAVEAT}
       </p>
       <p>
         <span className="hash">{commit.short_hash}</span>
@@ -104,15 +103,16 @@ export default function ButterflyPanel({
             ) : null}
           </div>
           <ButterflyGroup
-            title="Before this commit"
-            empty="No earlier analyzed commit had already edited these files."
-            links={trace.upstream}
+            title="After this change"
+            empty="No later analyzed commit edited these files again in this window."
+            links={trace.after}
+            emphasis
             onSelectHash={onSelectHash}
           />
           <ButterflyGroup
-            title="After this commit"
-            empty="No later analyzed commit edited these files again."
-            links={trace.downstream}
+            title="Before this change"
+            empty="No earlier analyzed commit had already edited these files."
+            links={trace.before}
             onSelectHash={onSelectHash}
           />
         </>
@@ -153,15 +153,17 @@ function ButterflyGroup({
   title,
   empty,
   links,
+  emphasis = false,
   onSelectHash,
 }: {
   title: string;
   empty: string;
   links: { commit: CommitEvidence; shared: string[] }[];
+  emphasis?: boolean;
   onSelectHash: (hash: string) => void;
 }) {
   return (
-    <div className="butterfly-group">
+    <div className={emphasis ? "butterfly-group is-primary" : "butterfly-group"}>
       <h4>
         {title}
         {links.length > 0 ? <span className="form-hint"> ({formatCount(links.length)})</span> : null}

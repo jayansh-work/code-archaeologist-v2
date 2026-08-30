@@ -8,7 +8,17 @@ client = TestClient(app)
 def test_health() -> None:
     response = client.get("/health")
     assert response.status_code == 200
-    assert response.json() == {"status": "ok", "service": "code-archaeologist-api"}
+    body = response.json()
+    assert body["status"] == "ok"
+    assert body["service"] == "code-archaeologist-api"
+    assert body["version"] == "2.0.0"
+    assert isinstance(body["ai_available"], bool)
+
+
+def test_health_never_leaks_the_api_key() -> None:
+    blob = client.get("/health").text.lower()
+    for token in ("api_key", "aiza", "gemini_api_key"):
+        assert token not in blob
 
 
 def test_info_lists_implemented_capabilities() -> None:

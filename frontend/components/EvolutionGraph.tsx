@@ -14,7 +14,7 @@ import {
 import "@xyflow/react/dist/style.css";
 
 import CommitNode, { type CommitFlowNode } from "@/components/CommitNode";
-import { computeButterfly } from "@/lib/butterfly";
+import { butterflyRelatedHashes, computeButterfly } from "@/lib/butterfly";
 import { NODE_H, NODE_W, columnCount, snakePosition } from "@/lib/graphLayout";
 import type { CommitEvidence } from "@/lib/types";
 
@@ -85,16 +85,7 @@ function GraphCanvas({
     () => (origin ? computeButterfly(commits, origin) : null),
     [commits, origin],
   );
-  const related = useMemo(() => {
-    if (!butterfly) {
-      return new Set<string>();
-    }
-    return new Set([
-      butterfly.origin.hash,
-      ...butterfly.upstream.map((item) => item.commit.hash),
-      ...butterfly.downstream.map((item) => item.commit.hash),
-    ]);
-  }, [butterfly]);
+  const related = useMemo(() => new Set(butterflyRelatedHashes(butterfly)), [butterfly]);
 
   const nodes: CommitFlowNode[] = useMemo(
     () =>
@@ -138,9 +129,14 @@ function GraphCanvas({
     if (!butterfly || !origin) {
       return timeline;
     }
+    // Later continuation is the headline direction, so it gets more edges.
     const ripplePairs: { source: string; target: string }[] = [
-      ...butterfly.upstream.slice(0, 3).map((item) => ({ source: item.commit.hash, target: origin.hash })),
-      ...butterfly.downstream.slice(0, 3).map((item) => ({ source: origin.hash, target: item.commit.hash })),
+      ...butterfly.after
+        .slice(0, 4)
+        .map((item) => ({ source: origin.hash, target: item.commit.hash })),
+      ...butterfly.before
+        .slice(0, 2)
+        .map((item) => ({ source: item.commit.hash, target: origin.hash })),
     ];
     const ripple: Edge[] = [];
     for (const pair of ripplePairs) {

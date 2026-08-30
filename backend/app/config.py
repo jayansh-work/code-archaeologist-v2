@@ -29,7 +29,10 @@ class Settings(BaseSettings):
     gemini_api_key: str = ""
     google_api_key: str = ""
     gemini_model: str = "gemini-3.5-flash"
-    gemini_timeout_seconds: int = 45
+    # Per-request timeout, then a ceiling for the whole model-fallback chain so
+    # the API always responds before the browser's own query timeout.
+    gemini_timeout_seconds: int = 20
+    gemini_total_budget_seconds: int = 40
 
     @property
     def allowed_origins(self) -> list[str]:

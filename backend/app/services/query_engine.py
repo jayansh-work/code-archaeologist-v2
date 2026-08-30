@@ -476,7 +476,12 @@ def _before_commit(analysis: StoredAnalysis, question: str) -> QueryResponse:
             ),
             evidence=[],
         )
-    older = [commit for commit in analysis.commits if commit.timestamp < target.timestamp]
+    # Analyzed commits are newest-first, so anything after the target index is older.
+    target_index = next(
+        (index for index, commit in enumerate(analysis.commits) if commit.hash == target.hash),
+        -1,
+    )
+    older = analysis.commits[target_index + 1 :] if target_index >= 0 else []
     if not older:
         return QueryResponse(
             mode="repository-search",
@@ -628,15 +633,7 @@ def _keyword_search(analysis: StoredAnalysis, question: str) -> QueryResponse:
             scored.append((score, commit))
     scored.sort(key=lambda pair: pair[0], reverse=True)
     if not scored:
-        return QueryResponse(
-            mode="repository-search",
-            intent="keyword_search",
-            answer=(
-                "No matching commits found in the analyzed history. "
-                "Try a commit message, file path, author, or hash."
-            ),
-            evidence=[],
-        )
+        return _diverse_fallback(analysis, terms)
     matches = [commit for _score, commit in scored[:10]]
     answer = (
         f"Found {len(scored)} matching commit{'s' if len(scored) != 1 else ''} "
@@ -647,6 +644,44 @@ def _keyword_search(analysis: StoredAnalysis, question: str) -> QueryResponse:
         intent="keyword_search",
         answer=answer,
         evidence=[_to_evidence(commit) for commit in matches],
+    )
+
+
+def _diverse_fallback(analysis: StoredAnalysis, terms: list[str]) -> QueryResponse:
+    """No lexical match: still hand back a useful, bounded evidence spread.
+
+    Broad questions should not reach the explanation layer with zero
+    context, so mix recent commits with the highest-churn commits and
+    state plainly that nothing matched the wording.
+    """
+    commits = analysis.commits
+    if not commits:
+        return QueryResponse(
+            mode="repository-search",
+            intent="keyword_search",
+            answer="The analyzed Git history does not contain commits to search.",
+            evidence=[],
+        )
+    picked: list[CommitEvidence] = []
+    seen: set[str] = set()
+    largest = sorted(commits, key=_commit_churn, reverse=True)[:4]
+    for commit in (*commits[:5], *largest, commits[-1]):
+        if commit.hash in seen:
+            continue
+        seen.add(commit.hash)
+        picked.append(commit)
+    hint = f"`{', '.join(terms)}`" if terms else "that wording"
+    answer = (
+        f"No analyzed commit message, file path, or author matches {hint}. "
+        f"Showing a general sample of the analyzed window instead: the most recent commits "
+        f"and the largest changes across {analysis.summary.commits_analyzed} analyzed commits. "
+        "This window is the latest commits only, not the full repository history."
+    )
+    return QueryResponse(
+        mode="repository-search",
+        intent="keyword_search",
+        answer=answer,
+        evidence=[_to_evidence(commit) for commit in picked[:8]],
     )
 
 

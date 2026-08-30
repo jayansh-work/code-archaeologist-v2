@@ -98,13 +98,48 @@ def _map_clone_failure(stderr: str) -> None:
     raise RepositoryUnavailableError()
 
 
+_RENAME_BRACE_RE = re.compile(r"\{(?P<old>[^{}]*) => (?P<new>[^{}]*)\}")
+
+
+def _tidy_path(path: str) -> str:
+    """Collapse the empty segments Git brace-rename notation can leave behind."""
+    while "//" in path:
+        path = path.replace("//", "/")
+    return path.strip("/") if path.startswith("/") else path
+
+
+def resolve_rename_path(path: str) -> tuple[str, str | None]:
+    """Return (destination, source) for Git rename notation in numstat output.
+
+    Git writes renames either as `old.py => new.py` or with a shared
+    prefix/suffix collapsed into braces, e.g. `src/{old => new}/file.py`.
+    Only the destination is stored on the FileChange; the source is
+    returned so callers can keep it if useful.
+    """
+    brace = _RENAME_BRACE_RE.search(path)
+    if brace is not None:
+        prefix, suffix = path[: brace.start()], path[brace.end() :]
+        destination = _tidy_path(f"{prefix}{brace.group('new')}{suffix}")
+        source = _tidy_path(f"{prefix}{brace.group('old')}{suffix}")
+        return destination, (source or None)
+    if " => " in path:
+        source_raw, destination_raw = path.split(" => ", 1)
+        return destination_raw.strip(), (source_raw.strip() or None)
+    return path, None
+
+
 def _parse_numstat_line(line: str) -> FileChange | None:
     parts = line.split("\t")
     if len(parts) < 3:
         return None
-    added_raw, deleted_raw, path = parts[0], parts[1], "\t".join(parts[2:])
-    if " => " in path:
-        path = path.split(" => ", 1)[-1].strip("{").strip("}")
+    added_raw, deleted_raw = parts[0], parts[1]
+    rest = parts[2:]
+    if len(rest) >= 2 and rest[0] and rest[-1]:
+        # `-z`-style rename rows arrive as added, deleted, old, new.
+        path = rest[-1]
+    else:
+        path = "\t".join(rest)
+    path, _source = resolve_rename_path(path)
     binary = added_raw == "-" or deleted_raw == "-"
     additions = 0 if binary or not added_raw.isdigit() else int(added_raw)
     deletions = 0 if binary or not deleted_raw.isdigit() else int(deleted_raw)
@@ -141,6 +176,7 @@ def _parse_name_status(output: str) -> dict[str, dict[str, str]]:
         status, path = match.group(1), match.group(2)
         if "\t" in path:
             path = path.split("\t")[-1]
+        path, _source = resolve_rename_path(path)
         letter = status[0]
         readable = {
             "A": "added",
@@ -205,9 +241,10 @@ def _summarize(commits: list[CommitEvidence]) -> AnalysisSummary:
     files = {file.path for commit in commits for file in commit.files}
     additions = sum(commit.additions for commit in commits)
     deletions = sum(commit.deletions for commit in commits)
-    timestamps = [commit.timestamp for commit in commits if commit.timestamp]
-    first_at = min(timestamps) if timestamps else None
-    last_at = max(timestamps) if timestamps else None
+    # `git log` is newest-first, so use that order instead of comparing ISO
+    # strings that may carry different timezone offsets.
+    last_at = commits[0].timestamp if commits else None
+    first_at = commits[-1].timestamp if commits else None
     return AnalysisSummary(
         commits_analyzed=len(commits),
         contributors_found=len(authors),

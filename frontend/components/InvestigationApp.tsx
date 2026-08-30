@@ -15,7 +15,9 @@ import RepositoryForm from "@/components/RepositoryForm";
 import RepositoryQuery from "@/components/RepositoryQuery";
 import RepositorySummary from "@/components/RepositorySummary";
 import TeamCredits from "@/components/TeamCredits";
-import { analyzeRepository, fetchAiNotes, queryRepository } from "@/lib/api";
+import { analyzeRepository, fetchAiNotes, isCancelled, queryRepository } from "@/lib/api";
+import type { AskContext } from "@/lib/askContext";
+import { commitContext, contextFile, contextHash, fileContext } from "@/lib/askContext";
 import type { InlineAskState } from "@/lib/inlineAsk";
 import type { ArchaeologistNote, AnalyzeResponse, CommitEvidence, QueryResponse } from "@/lib/types";
 import { validateGithubRepoUrl } from "@/lib/validation";
@@ -25,14 +27,19 @@ const EvolutionGraph = dynamic(() => import("@/components/EvolutionGraph"), { ss
 type Status = "idle" | "loading" | "success" | "error";
 type QueryStatus = "idle" | "loading" | "success" | "error";
 
+const GENERIC_QUERY_ERROR =
+  "The investigation could not be completed. Analyze the repository again if the session expired.";
+
 export default function InvestigationApp() {
   const [repoUrl, setRepoUrl] = useState("");
   const [status, setStatus] = useState<Status>("idle");
   const [error, setError] = useState<string | null>(null);
+  const [reanalyzeError, setReanalyzeError] = useState<string | null>(null);
   const [analysis, setAnalysis] = useState<AnalyzeResponse | null>(null);
   const [notes, setNotes] = useState<ArchaeologistNote[]>([]);
   const [notesLoading, setNotesLoading] = useState(false);
   const [question, setQuestion] = useState("");
+  const [askContext, setAskContext] = useState<AskContext | null>(null);
   const [queryStatus, setQueryStatus] = useState<QueryStatus>("idle");
   const [queryError, setQueryError] = useState<string | null>(null);
   const [queryResult, setQueryResult] = useState<QueryResponse | null>(null);
@@ -43,9 +50,21 @@ export default function InvestigationApp() {
   const analyzeLock = useRef(false);
   const queryLock = useRef(false);
   const inlineLocks = useRef(new Set<string>());
-  const lastQuestion = useRef("");
+  const lastQuery = useRef<{ question: string; context: AskContext | null }>({
+    question: "",
+    context: null,
+  });
+
+  // Request ownership: every async response must prove it still belongs to the
+  // analysis that is on screen before it is allowed to write state.
+  const ownerRef = useRef<string | null>(null);
+  const scopeRef = useRef<AbortController | null>(null);
 
   const repoLabel = analysis ? `${analysis.repository.owner}/${analysis.repository.name}` : undefined;
+
+  function owns(analysisId: string): boolean {
+    return ownerRef.current === analysisId;
+  }
 
   function resolveCommitHash(hash: string): string | null {
     if (!analysis) {
@@ -64,20 +83,31 @@ export default function InvestigationApp() {
   const selectedCommit = analysis?.commits.find((commit) => commit.hash === selectedHash) ?? null;
 
   const liveMessage = useMemo(() => {
+    // A running query is the newest thing the user did, so it wins over the
+    // already-announced analysis result.
+    if (queryStatus === "loading") {
+      return "Investigating repository history";
+    }
     if (status === "loading") {
       return "Excavating repository history";
+    }
+    if (queryStatus === "error" && queryError) {
+      return queryError;
     }
     if (status === "error" && error) {
       return error;
     }
+    if (reanalyzeError) {
+      return reanalyzeError;
+    }
+    if (queryStatus === "success") {
+      return "Investigation finding ready";
+    }
     if (status === "success") {
       return "Repository analysis complete";
     }
-    if (queryStatus === "loading") {
-      return "Investigating repository history";
-    }
     return "";
-  }, [status, error, queryStatus]);
+  }, [status, error, queryStatus, queryError, reanalyzeError]);
 
   function selectCommit(hash: string | null, scrollHistory = false) {
     const resolved = hash ? resolveCommitHash(hash) ?? hash : null;
@@ -92,62 +122,94 @@ export default function InvestigationApp() {
     }
   }
 
-  function askAboutFile(path: string) {
-    setFileFilter(path);
-    void runQuery(`Summarize the evolution of ${path}.`, null, path);
-  }
-
   async function runAnalyze() {
     if (analyzeLock.current) {
       return;
     }
     const invalid = validateGithubRepoUrl(repoUrl);
     if (invalid) {
-      setStatus("error");
-      setError(invalid);
+      if (analysis) {
+        setReanalyzeError(invalid);
+      } else {
+        setStatus("error");
+        setError(invalid);
+      }
       return;
     }
+    const hadWorkspace = analysis !== null;
     analyzeLock.current = true;
+    // Drop ownership first so anything still in flight for the old analysis
+    // cannot write into the new workspace.
+    ownerRef.current = null;
+    scopeRef.current?.abort();
+    scopeRef.current = null;
     setStatus("loading");
     setError(null);
+    setReanalyzeError(null);
     setQueryResult(null);
     setQueryError(null);
     setQueryStatus("idle");
-    setSelectedHash(null);
-    setFileFilter("");
-    setNotes([]);
-    setAsks({});
+    setNotesLoading(false);
     try {
       const result = await analyzeRepository(repoUrl.trim());
+      const scope = new AbortController();
+      ownerRef.current = result.analysis_id;
+      scopeRef.current = scope;
       setAnalysis(result);
       setNotes(result.notes);
+      setSelectedHash(null);
+      setFileFilter("");
+      setAskContext(null);
+      setQuestion("");
+      setAsks({});
+      lastQuery.current = { question: "", context: null };
       setStatus("success");
       setShowAnother(false);
       setNotesLoading(true);
-      void fetchAiNotes(result.analysis_id)
+      void fetchAiNotes(result.analysis_id, scope.signal)
         .then((extra) => {
-          if (extra.notes.length > 0) {
-            setNotes((current) => [...current, ...extra.notes]);
+          if (!owns(result.analysis_id) || extra.notes.length === 0) {
+            return;
           }
+          setNotes((current) => [...current, ...extra.notes]);
         })
         .catch(() => {
-          // Deterministic notes already shown.
+          // Deterministic notes are already on screen.
         })
-        .finally(() => setNotesLoading(false));
+        .finally(() => {
+          if (owns(result.analysis_id)) {
+            setNotesLoading(false);
+          }
+        });
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Repository could not be analyzed.");
-      if (!analysis) {
-        setAnalysis(null);
-        setStatus("error");
-      } else {
+      const message =
+        caught instanceof Error ? caught.message : "Repository could not be analyzed.";
+      if (hadWorkspace) {
+        // Non-destructive: keep the previous investigation but say plainly
+        // that the new repository failed.
+        setReanalyzeError(message);
         setStatus("success");
+        setShowAnother(true);
+        if (analysis) {
+          ownerRef.current = analysis.analysis_id;
+          const scope = new AbortController();
+          scopeRef.current = scope;
+        }
+      } else {
+        setAnalysis(null);
+        setError(message);
+        setStatus("error");
       }
     } finally {
       analyzeLock.current = false;
     }
   }
 
-  async function runQuery(raw: string, contextCommit?: CommitEvidence | null, contextFile?: string) {
+  /**
+   * Main repository-wide investigation. Scope comes only from `context`,
+   * never from the selected commit or the history file filter.
+   */
+  async function runQuery(raw: string, context: AskContext | null) {
     if (!analysis || queryLock.current) {
       return;
     }
@@ -157,40 +219,50 @@ export default function InvestigationApp() {
       setQueryError("Enter a question about this repository.");
       return;
     }
+    const analysisId = analysis.analysis_id;
+    const signal = scopeRef.current?.signal;
     queryLock.current = true;
-    lastQuestion.current = nextQuestion;
+    lastQuery.current = { question: nextQuestion, context };
     setQuestion(nextQuestion);
+    setAskContext(context);
     setQueryStatus("loading");
     setQueryError(null);
     try {
-      const result = await queryRepository(
-        analysis.analysis_id,
-        nextQuestion,
-        contextCommit?.hash ?? selectedHash,
-        contextFile ?? (fileFilter || undefined),
-      );
+      const result = await queryRepository(analysisId, nextQuestion, {
+        selectedHash: contextHash(context),
+        selectedFile: contextFile(context),
+        recordHistory: true,
+        signal,
+      });
+      if (!owns(analysisId)) {
+        return;
+      }
       setQueryResult(result);
       setQueryStatus("success");
       requestAnimationFrame(() => {
         document.getElementById("finding-heading")?.scrollIntoView({ block: "start" });
       });
     } catch (caught) {
+      if (isCancelled(caught) || !owns(analysisId)) {
+        return;
+      }
       setQueryStatus("error");
-      setQueryError(
-        caught instanceof Error
-          ? caught.message
-          : "The investigation could not be completed. Analyze the repository again if the session expired.",
-      );
+      setQueryError(caught instanceof Error ? caught.message : GENERIC_QUERY_ERROR);
     } finally {
       queryLock.current = false;
     }
   }
 
+  /**
+   * Inline explanation for one commit, file, or butterfly trace. Always
+   * explicitly scoped, and never recorded into the main conversation so
+   * follow-up questions in the main bar stay coherent.
+   */
   async function runInlineAsk(
     slot: string,
     question: string,
-    contextCommit?: CommitEvidence | null,
-    contextFile?: string,
+    contextCommit: CommitEvidence | null,
+    contextFilePath?: string,
   ) {
     if (!analysis || inlineLocks.current.has(slot)) {
       return;
@@ -199,32 +271,37 @@ export default function InvestigationApp() {
     if (!nextQuestion) {
       return;
     }
+    const analysisId = analysis.analysis_id;
+    const signal = scopeRef.current?.signal;
     inlineLocks.current.add(slot);
     setAsks((current) => ({
       ...current,
       [slot]: { status: "loading", result: null, error: null, question: nextQuestion },
     }));
     try {
-      const result = await queryRepository(
-        analysis.analysis_id,
-        nextQuestion,
-        contextCommit?.hash ?? selectedHash,
-        contextFile,
-      );
+      const result = await queryRepository(analysisId, nextQuestion, {
+        selectedHash: contextCommit?.hash ?? null,
+        selectedFile: contextFilePath ?? null,
+        recordHistory: false,
+        signal,
+      });
+      if (!owns(analysisId)) {
+        return;
+      }
       setAsks((current) => ({
         ...current,
         [slot]: { status: "success", result, error: null, question: nextQuestion },
       }));
     } catch (caught) {
+      if (isCancelled(caught) || !owns(analysisId)) {
+        return;
+      }
       setAsks((current) => ({
         ...current,
         [slot]: {
           status: "error",
           result: null,
-          error:
-            caught instanceof Error
-              ? caught.message
-              : "The investigation could not be completed. Analyze the repository again if the session expired.",
+          error: caught instanceof Error ? caught.message : GENERIC_QUERY_ERROR,
           question: nextQuestion,
         },
       }));
@@ -249,7 +326,8 @@ export default function InvestigationApp() {
           Make it searchable.
         </h1>
         <p className="hero-copy">
-          Explore how a codebase evolved through real commits, changed files, authors, timestamps, and diffs.
+          Explore how a codebase evolved through real commits, changed files, authors, timestamps,
+          and diff statistics.
         </p>
 
         <div className="landing-form">
@@ -285,8 +363,14 @@ export default function InvestigationApp() {
         {workspace ? (
           <>
             <div className="workspace-toolbar">
-              <p className="form-hint">{analysis.summary.history_window}. These figures are not whole-repository totals.</p>
-              <button className="link-btn" type="button" onClick={() => setShowAnother((value) => !value)}>
+              <p className="form-hint">
+                {analysis.summary.history_window}. These figures are not whole-repository totals.
+              </p>
+              <button
+                className="link-btn"
+                type="button"
+                onClick={() => setShowAnother((value) => !value)}
+              >
                 Analyze another repository
               </button>
             </div>
@@ -298,12 +382,35 @@ export default function InvestigationApp() {
                 onSubmit={runAnalyze}
               />
             ) : null}
+            {reanalyzeError ? (
+              <div className="error-box" role="alert">
+                <p>Could not analyze the new repository.</p>
+                <p>{reanalyzeError}</p>
+                <p>
+                  Your previous investigation of {repoLabel} is still available below.
+                </p>
+                <div className="error-actions">
+                  <button className="ghost-btn" type="button" onClick={runAnalyze}>
+                    Try again
+                  </button>
+                  <button
+                    className="link-btn"
+                    type="button"
+                    onClick={() => setReanalyzeError(null)}
+                  >
+                    Keep current investigation
+                  </button>
+                </div>
+              </div>
+            ) : null}
             <RepositorySummary analysis={analysis} />
             <RepositoryQuery
               value={question}
               disabled={queryStatus === "loading"}
+              context={askContext}
               onChange={setQuestion}
-              onSubmit={(next) => void runQuery(next)}
+              onClearContext={() => setAskContext(null)}
+              onSubmit={(next) => void runQuery(next, askContext)}
             />
             {queryStatus === "loading" ? (
               <div className="status" role="status">
@@ -314,7 +421,13 @@ export default function InvestigationApp() {
             {queryStatus === "error" && queryError ? (
               <div className="error-box" role="alert">
                 <p>{queryError}</p>
-                <button className="ghost-btn" type="button" onClick={() => void runQuery(lastQuestion.current)}>
+                <button
+                  className="ghost-btn"
+                  type="button"
+                  onClick={() =>
+                    void runQuery(lastQuery.current.question, lastQuery.current.context)
+                  }
+                >
                   Retry
                 </button>
               </div>
@@ -325,8 +438,10 @@ export default function InvestigationApp() {
                 loading={queryStatus === "loading"}
                 onSelectHash={(hash) => selectCommit(hash, true)}
                 onSelectFile={setFileFilter}
-                onAsk={(next) => void runQuery(next)}
-                onRetry={() => void runQuery(lastQuestion.current)}
+                onAsk={(next) => void runQuery(next, askContext)}
+                onRetry={() =>
+                  void runQuery(lastQuery.current.question, lastQuery.current.context)
+                }
               />
             ) : null}
 
@@ -350,9 +465,9 @@ export default function InvestigationApp() {
                     asks={asks}
                     onSelectHash={(hash) => selectCommit(hash)}
                     onSelectFile={setFileFilter}
-                    onAsk={(slot, question, commit, file) => {
+                    onAsk={(slot, inlineQuestion, commit, file) => {
                       selectCommit(commit.hash);
-                      void runInlineAsk(slot, question, commit, file);
+                      void runInlineAsk(slot, inlineQuestion, commit, file);
                     }}
                   />
                   <ButterflyPanel
@@ -361,9 +476,9 @@ export default function InvestigationApp() {
                     asks={asks}
                     onSelectHash={(hash) => selectCommit(hash)}
                     onSelectFile={setFileFilter}
-                    onAsk={(slot, question, commit, file) => {
+                    onAsk={(slot, inlineQuestion, commit, file) => {
                       selectCommit(commit.hash);
-                      void runInlineAsk(slot, question, commit, file);
+                      void runInlineAsk(slot, inlineQuestion, commit, file);
                     }}
                   />
                 </div>
@@ -387,10 +502,13 @@ export default function InvestigationApp() {
                 selectCommit(commit.hash);
                 void runQuery(
                   `Explain this commit ${commit.short_hash} to someone new to the codebase.`,
-                  commit,
+                  commitContext(commit.short_hash, commit.hash),
                 );
               }}
-              onAskFile={askAboutFile}
+              onAskFile={(path) => {
+                setFileFilter(path);
+                void runQuery(`Summarize the evolution of ${path}.`, fileContext(path));
+              }}
             />
           </>
         ) : (

@@ -56,9 +56,10 @@ def build_deterministic_notes(commits: list[CommitEvidence], commits_window: int
                     kind="butterfly",
                     title="Butterfly effect",
                     body=(
-                        f"{hotspot} did not stay a one-time edit. After it first showed up, "
-                        f"it was changed again in {later} later analyzed commit"
-                        f"{'s' if later != 1 else ''} in this window."
+                        f"{hotspot} did not stay a one-time edit. After its earliest analyzed "
+                        f"change, {later} later analyzed commit"
+                        f"{'s' if later != 1 else ''} edited the same file. That is shared file "
+                        "history, not proof that one change caused another."
                     ),
                     file_path=hotspot,
                 )
