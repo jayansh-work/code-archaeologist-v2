@@ -80,6 +80,17 @@ This shows shared file history. It does **not** prove one change caused another.
 
 See [docs/architecture.md](docs/architecture.md).
 
+## Design & Figma
+
+The submission design story follows the implemented product flow:
+
+**EXCAVATE → VISUALIZE → INVESTIGATE → TRACE → VERIFY**
+
+- **Figma:** [Code Archaeologist — Product Design & User Flow — Final](https://www.figma.com/design/HLlrHpTSwKNl8HV0eMEksz/Code-Archaeologist-%E2%80%94-Product-Design---User-Flow-%E2%80%94-Final?node-id=4-31)
+- **Design system and three-frame handoff:** [docs/figma-handoff.md](docs/figma-handoff.md)
+
+The Figma file is intended to document the current product—not redesign it—with three frames: Product Flow, Design System, and Annotated Final Screen.
+
 ```
 Browser → Next.js → FastAPI → Git analyzer → temporary clone → Git CLI
        → structured evidence → session store → query engine
