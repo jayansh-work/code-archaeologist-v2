@@ -1,4 +1,4 @@
-"""Block accidental live Gemini calls from the test suite.
+"""Block accidental live OpenRouter calls from the test suite.
 
 Tests that replace `httpx.Client.post` themselves (the 429 / key / parse
 cases) override this wrapper. Everything else, including TestClient /query
@@ -10,21 +10,21 @@ from __future__ import annotations
 import httpx
 import pytest
 
-from app.services import gemini
+from app.services import ai
 
 
 @pytest.fixture(autouse=True)
-def _no_live_gemini_and_fresh_cache(monkeypatch: pytest.MonkeyPatch) -> None:
-    gemini.clear_ai_cache()
+def _no_live_provider_and_fresh_cache(monkeypatch: pytest.MonkeyPatch) -> None:
+    ai.clear_ai_cache()
     real_post = httpx.Client.post
 
     def guarded(self: httpx.Client, url: str, **kwargs: object) -> httpx.Response:
         target = str(url)
-        if "generativelanguage.googleapis.com" in target:
+        if "openrouter.ai" in target or "generativelanguage.googleapis.com" in target:
             return httpx.Response(
                 403,
                 request=httpx.Request("POST", target),
-                json={"error": {"status": "PERMISSION_DENIED"}},
+                json={"error": {"message": "blocked by tests"}},
             )
         return real_post(self, url, **kwargs)
 

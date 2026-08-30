@@ -2,7 +2,7 @@ from fastapi import APIRouter
 
 from app.config import settings
 from app.models import InfoResponse
-from app.services.gemini import gemini_available
+from app.services.ai import ai_available
 
 router = APIRouter()
 
@@ -20,13 +20,14 @@ def info() -> InfoResponse:
         "butterfly-effect",
         "archaeologist-notes",
     ]
-    if gemini_available():
+    if ai_available():
         capabilities.append("evidence-grounded-ai")
     return InfoResponse(
         name=settings.app_name,
         version=settings.app_version,
         capabilities=capabilities,
-        ai_enabled=gemini_available(),
+        ai_enabled=ai_available(),
+        ai_provider="openrouter",
         max_commits=settings.max_commits,
         session_ttl_minutes=settings.session_ttl_seconds // 60,
     )

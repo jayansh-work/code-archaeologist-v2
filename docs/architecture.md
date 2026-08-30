@@ -21,7 +21,7 @@ Analysis Session Store
     ↓
 Evidence retrieval
     ↓
-Optional grounded Gemini
+Optional grounded AI explanation
     ↓
 Evolution flowchart + butterfly effect + notes + investigation workspace
 ```
@@ -63,9 +63,9 @@ The query engine matches questions to intents (most-changed files, largest commi
 
 Retrieval is lightweight and lexical: commit messages, file paths, authors, short hashes, change magnitude, recency, and explicit user-selected context. There is no embedding model or vector store. When a question matches nothing lexically, retrieval returns a bounded, diverse sample — the most recent commits plus the highest-churn commits — and states that the window is limited, so the explanation layer never runs with zero evidence.
 
-If `GEMINI_API_KEY` is set, Gemini may rewrite the answer using only the retrieved evidence JSON. It is not given the whole repository or any file contents. Analyzing a repository never calls Gemini; quota is reserved for explicit Ask questions. Identical questions in a session reuse a bounded in-memory cache. All Gemini calls in the process share one lock so Ask buttons cannot burst the free-tier quota. HTTP 429 is retried at most once, then the deterministic retrieval is returned.
+If `OPENROUTER_API_KEY` is set, OpenRouter may rewrite the answer using a configured model and only the retrieved evidence JSON. It is not given the whole repository or any file contents. The AI does not generate the underlying commit/file history. Analyzing a repository never calls the AI provider; quota is reserved for explicit Ask questions. Identical questions in a session reuse a bounded in-memory cache. All AI calls in the process share one lock so Ask buttons cannot burst provider quota. HTTP 429 is retried at most once, then the deterministic retrieval is returned. OpenRouter does not remove rate limits.
 
-The deterministic explanation is always attached to the response, so a failure at the model layer degrades the answer instead of emptying it. When AI does not contribute, the response reports `mode: ai-unavailable`, `ai_used: false`, and a reason (`not_configured`, `invalid_key`, `rate_limited`, `provider_error`), and the UI labels the text as retrieved from Git history rather than AI. A rate-limit notice is a capacity message, not a repository failure.
+The deterministic explanation is always attached to the response, so a failure at the model layer degrades the answer instead of emptying it. When AI does not contribute, the response reports `mode: ai-unavailable`, `ai_used: false`, and a reason (`not_configured`, `invalid_credentials`, `insufficient_credits`, `model_unavailable`, `provider_timeout`, `rate_limited`, `provider_error`), and the UI labels the text as retrieved from Git history rather than AI. A rate-limit notice is a capacity message, not a repository failure.
 
 ## Ask scope
 

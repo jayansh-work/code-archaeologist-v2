@@ -96,6 +96,7 @@ def test_sessions_never_persist_api_keys(tmp_path) -> None:
     for path in tmp_path.glob("*.json"):
         blob = path.read_text(encoding="utf-8").lower()
         assert "api_key" not in blob
+        assert "openrouter" not in blob
         assert "gemini" not in blob
 
 

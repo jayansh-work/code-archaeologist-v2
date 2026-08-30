@@ -2,7 +2,7 @@ from fastapi import APIRouter
 
 from app.config import settings
 from app.models import HealthResponse
-from app.services.gemini import gemini_available
+from app.services.ai import ai_available
 
 router = APIRouter()
 
@@ -13,5 +13,5 @@ def health() -> HealthResponse:
         status="ok",
         service=settings.service_id,
         version=settings.app_version,
-        ai_available=gemini_available(),
+        ai_available=ai_available(),
     )

@@ -51,19 +51,17 @@ function Test-CaCommand([string]$Name) {
 }
 
 # True when the key looks configured, without ever reading its value out loud.
-function Test-CaGeminiKeyConfigured([string]$EnvFile) {
-    foreach ($name in @("GEMINI_API_KEY", "GOOGLE_API_KEY")) {
-        $value = [Environment]::GetEnvironmentVariable($name)
-        if ($value -and $value.Trim().Length -gt 0) {
-            return $true
-        }
+function Test-CaAiKeyConfigured([string]$EnvFile) {
+    $value = [Environment]::GetEnvironmentVariable("OPENROUTER_API_KEY")
+    if ($value -and $value.Trim().Length -gt 0) {
+        return $true
     }
     if (-not (Test-Path $EnvFile)) {
         return $false
     }
     foreach ($line in Get-Content $EnvFile) {
-        if ($line -match '^\s*(GEMINI_API_KEY|GOOGLE_API_KEY)\s*=\s*(.+)\s*$') {
-            if ($Matches[2].Trim().Trim('"').Trim("'").Length -gt 0) {
+        if ($line -match '^\s*OPENROUTER_API_KEY\s*=\s*(.+)\s*$') {
+            if ($Matches[1].Trim().Trim('"').Trim("'").Length -gt 0) {
                 return $true
             }
         }

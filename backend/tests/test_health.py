@@ -17,7 +17,7 @@ def test_health() -> None:
 
 def test_health_never_leaks_the_api_key() -> None:
     blob = client.get("/health").text.lower()
-    for token in ("api_key", "aiza", "gemini_api_key"):
+    for token in ("api_key", "aiza", "gemini_api_key", "openrouter_api_key", "sk-or-"):
         assert token not in blob
 
 
@@ -41,3 +41,10 @@ def test_info_lists_implemented_capabilities() -> None:
         assert capability in body["capabilities"]
     assert body["max_commits"] == 30
     assert isinstance(body["ai_enabled"], bool)
+    assert body["ai_provider"] == "openrouter"
+
+
+def test_info_never_leaks_the_api_key() -> None:
+    blob = client.get("/info").text.lower()
+    for token in ("openrouter_api_key", "sk-or-", "authorization"):
+        assert token not in blob

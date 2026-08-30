@@ -26,21 +26,23 @@ class Settings(BaseSettings):
 
     cors_origins: str = "http://localhost:3000,http://127.0.0.1:3000"
 
-    gemini_api_key: str = ""
-    google_api_key: str = ""
-    gemini_model: str = "gemini-3.5-flash"
+    openrouter_api_key: str = ""
+    openrouter_model: str = "openai/gpt-4o-mini"
+    openrouter_fallback_models: str = "anthropic/claude-3.5-haiku"
+    openrouter_app_name: str = "Code Archaeologist"
+    openrouter_site_url: str = ""
     # Per-request timeout, then a ceiling for the whole model-fallback chain so
     # the API always responds before the browser's own query timeout.
-    gemini_timeout_seconds: int = 20
-    gemini_total_budget_seconds: int = 40
+    ai_timeout_seconds: int = 20
+    ai_total_budget_seconds: int = 40
 
     @property
     def allowed_origins(self) -> list[str]:
         return [item.strip() for item in self.cors_origins.split(",") if item.strip()]
 
     @property
-    def gemini_enabled(self) -> bool:
-        return bool((self.gemini_api_key or self.google_api_key).strip())
+    def ai_enabled(self) -> bool:
+        return bool(self.openrouter_api_key.strip())
 
 
 settings = Settings()

@@ -13,7 +13,7 @@ The live analysis on 30 Aug 2026 returned **10 real commits**, **80 changed file
 Why this one, from the actual analyzed window:
 
 - It is an older commit in the graph, not the newest tip.
-- It changed the investigation workspace, Gemini, notes, and query engine.
+- It changed the investigation workspace, AI investigation, notes, and query engine.
 - **5 later analyzed commits** reused those files: `cd99136`, `5d89474`, `7596d99`, `94472c6`, `edc84e8`.
 - That later set includes the Butterfly feature itself and the inline-AI placement fix, so the After this change list is visually obvious.
 
@@ -23,16 +23,16 @@ Do not pick `1471803` (only `.gitignore`) or the newest commit (`edc84e8` has no
 
 ## Tested questions
 
-These were actually sent to `POST /query` after analyzing the self-repository. After a short rate-limit window, Gemini returned `mode: grounded-ai` with `ai_used: true` and citations that matched real analyzed hashes.
+These were actually sent to `POST /query` after analyzing the self-repository. When the AI provider is available, the response is `mode: grounded-ai` with `ai_used: true` and citations that match real analyzed hashes. If the provider is rate-limited or unconfigured, the same Git ranking still appears, labelled as retrieved from Git history.
 
 Use these in the main Ask bar (repository-wide):
 
 1. **What are the most important changes in the analyzed history?**
-   Gemini cited `7f37406` (investigation workspace), `7463189` (analysis API), `6b34b50` (evolution graph), and `94472c6` (Butterfly flowchart).
+   Strong evidence in that window included `7f37406` (investigation workspace), `7463189` (analysis API), `6b34b50` (evolution graph), and `94472c6` (Butterfly flowchart).
 2. **How did the AI integration evolve?**
-   Gemini traced Gemini from `7463189` through the workspace (`6b34b50`), missing-key copy (`cd99136`), and inline answers (`edc84e8`).
+   The analyzed history traces the AI path from `7463189` through the workspace (`6b34b50`), missing-key copy (`cd99136`), and inline answers (`edc84e8`).
 3. **Which files changed the most?**
-   Returned file-level totals for this window (`frontend/app/globals.css`, `backend/app/services/query_engine.py`, `backend/app/services/gemini.py`, `frontend/components/InvestigationApp.tsx`, `README.md`, and lockfiles). The first live attempt hit a Gemini rate limit and still showed this ranking as retrieved Git evidence.
+   Returned file-level totals for this window (`frontend/app/globals.css`, `backend/app/services/query_engine.py`, `backend/app/services/ai.py`, `frontend/components/InvestigationApp.tsx`, `README.md`, and lockfiles). If the AI provider is rate-limited, this ranking still appears as retrieved Git evidence.
 
 Useful extras that also returned real evidence:
 
@@ -82,16 +82,16 @@ If a judge clicks around, let them. Main Ask stays repository-wide. Inline Ask s
 - "Butterfly Effect shows whether later changes continued touching the same area of the codebase. It shows historical relationships, not claimed causation."
 - "The AI does not replace the evidence. It organizes and explains the evidence."
 
-## Fallback if Gemini is unavailable or rate-limited
+## Fallback if the AI provider is unavailable or rate-limited
 
 Do not apologize or stall.
 
 1. Analyze the self-repository. The graph and notes still appear.
-2. Select `6b34b50` and walk Butterfly. That calculation is deterministic and does not need Gemini.
+2. Select `6b34b50` and walk Butterfly. That calculation is deterministic and does not need the AI provider.
 3. Ask **Which files changed the most?** The retrieved Git ranking still appears, labelled as retrieved from Git history, not AI.
-4. Click **Retry with AI** only if you have a few seconds. If it stays rate-limited, keep going with evidence.
+4. Click **Retry AI** only if you have a few seconds. If it stays rate-limited, keep going with evidence.
 
-The free Gemini tier is easy to exhaust while rehearsing. Git evidence is the demo. AI is the explanation layer.
+AI providers can still rate-limit requests. Git evidence is the demo. AI is the explanation layer.
 
 ## Fallback if GitHub is slow
 

@@ -112,10 +112,10 @@ if (Test-Path $envFile) {
     Record "Backend .env" "WARN" "Copy backend\.env.example to backend\.env."
 }
 
-if (Test-CaGeminiKeyConfigured -EnvFile $envFile) {
-    Record "Gemini key" "PASS" "Configured (value not shown)"
+if (Test-CaAiKeyConfigured -EnvFile $envFile) {
+    Record "AI provider key" "PASS" "Configured (value not shown)"
 } else {
-    Record "Gemini key" "WARN" "Not configured. Git analysis works; AI answers fall back to retrieved evidence."
+    Record "AI provider key" "WARN" "Not configured. Git analysis works; AI answers fall back to retrieved evidence."
 }
 
 Write-CaHeading "Ports"

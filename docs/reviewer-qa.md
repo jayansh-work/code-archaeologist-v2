@@ -8,7 +8,7 @@ Developers can inspect what code does today. It is harder to inspect how a repos
 
 ## How is this different from Cursor / Copilot / Claude?
 
-Those tools help write or change code. Code Archaeologist investigates the history of an existing public repository. It clones recent Git history, shows real commits on an evolution graph, calculates same-file Butterfly relationships, and only then optionally asks Gemini to explain retrieved evidence. The AI does not replace the evidence. It organizes and explains it.
+Those tools help write or change code. Code Archaeologist investigates the history of an existing public repository. It clones recent Git history, shows real commits on an evolution graph, calculates same-file Butterfly relationships, and only then optionally asks a configured language model (via OpenRouter) to explain retrieved evidence. The AI does not replace the evidence. It organizes and explains it.
 
 ## Where does your data come from?
 
@@ -40,7 +40,7 @@ The repository URL is validated first. Only `https://github.com/owner/name` is a
 
 ## Why FastAPI?
 
-A small Python API is enough to validate URLs, run Git, store a bounded session, retrieve evidence, and call Gemini. FastAPI gives typed request/response models and clear error mapping without extra infrastructure.
+A small Python API is enough to validate URLs, run Git, store a bounded session, retrieve evidence, and call an OpenRouter-compatible chat model. FastAPI gives typed request/response models and clear error mapping without extra infrastructure.
 
 ## Why Next.js?
 
@@ -52,11 +52,11 @@ The evolution graph needs pan, zoom, `fitView`, selectable nodes, and edges that
 
 ## How does the AI work?
 
-`POST /query` runs a deterministic query engine first. If `GEMINI_API_KEY` is set, Gemini receives only that retrieved evidence JSON plus a short conversation history. It is instructed not to invent hashes, files, authors, timestamps, or statistics.
+Code Archaeologist retrieves repository evidence first. OpenRouter is used to access a configured language model that explains the retrieved evidence. The AI does not generate the underlying commit/file history.
 
-## Do you send the entire repository to Gemini?
+## Do you send the entire repository to the model?
 
-No. Gemini sees repository metadata, the history-window summary, and up to 12 retrieved commits with file-path lists and diff statistics. File contents and unified patches are not sent.
+No. The model sees repository metadata, the history-window summary, and up to 12 retrieved commits with file-path lists and diff statistics. File contents and unified patches are not sent.
 
 ## What is evidence grounding?
 
@@ -64,9 +64,9 @@ Every finding is attached to the commits the query engine actually retrieved. Th
 
 ## How do you reduce hallucination?
 
-Retrieval happens first. The model is forbidden from inventing evidence. If evidence is thin, it must say so. If Gemini returns empty or invalid text, the UI shows the retrieved Git explanation and labels it as not an AI answer.
+Retrieval happens first. The model is forbidden from inventing evidence. If evidence is thin, it must say so. If the model returns empty or invalid text, the UI shows the retrieved Git explanation and labels it as not an AI answer.
 
-## What happens if Gemini lies?
+## What happens if the model lies?
 
 The evidence panel still lists the real commits. A judge can click a hash and inspect the Git record. The product is designed so a fluent sentence cannot hide the underlying evidence.
 
@@ -74,7 +74,7 @@ The evidence panel still lists the real commits. A judge can click a hash and in
 
 Analysis, the graph, Butterfly, notes, and deterministic answers still work. The finding is labelled as retrieved from Git history, not AI.
 
-## What happens if Gemini is down?
+## What happens if the AI provider is down?
 
 Same fallback. Git evidence stays visible. The response reports `mode: ai-unavailable` with a reason such as `provider_error` or `rate_limited`.
 
@@ -100,7 +100,7 @@ No. It shows file-level change statistics: paths, additions, deletions, and chan
 
 ## What are the current limitations?
 
-Public GitHub only. Latest 30 commits. Sessions expire after 45 minutes. No private-repo auth. No full patch view. Rename tracking keeps the destination path. Butterfly is same-file, one level deep, capped at 8 links per direction. The free Gemini tier is rate limited.
+Public GitHub only. Latest 30 commits. Sessions expire after 45 minutes. No private-repo auth. No full patch view. Rename tracking keeps the destination path. Butterfly is same-file, one level deep, capped at 8 links per direction. The AI provider can still rate-limit or reject requests.
 
 ## What would you build next?
 

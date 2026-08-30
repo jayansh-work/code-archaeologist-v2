@@ -3,7 +3,7 @@ from fastapi import APIRouter
 from app.exceptions import AnalysisNotFoundError, QueryError
 from app.models import QueryRequest, QueryResponse
 from app.services.analysis_store import ConversationTurn
-from app.services.gemini import investigate
+from app.services.ai import investigate
 from app.services.query_engine import answer_question
 from app.store import store
 

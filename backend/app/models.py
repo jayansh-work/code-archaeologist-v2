@@ -142,5 +142,6 @@ class InfoResponse(BaseModel):
     version: str
     capabilities: list[str]
     ai_enabled: bool
+    ai_provider: str = "openrouter"
     max_commits: int
     session_ttl_minutes: int

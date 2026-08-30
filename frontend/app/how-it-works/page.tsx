@@ -29,8 +29,9 @@ export default function HowItWorksPage() {
         <h2>3. Investigate</h2>
         <p>
           The main Ask bar is repository-wide. Selecting a commit or filtering files changes only
-          what you see. The API retrieves relevant commits first, then Gemini explains only that
-          evidence when an API key is configured. Findings stay linked to real hashes.
+          what you see. The API retrieves relevant commits first, then an optional AI explanation
+          covers only that evidence when a provider key is configured. Findings stay linked to
+          real hashes.
         </p>
         <h2>Limits</h2>
         <p>

@@ -20,7 +20,7 @@ Structured evidence + session store
     ↓
 Evidence retrieval
     ↓
-Optional grounded Gemini
+Optional grounded AI explanation
     ↓
 Evolution graph + butterfly effect + notes + investigation view`}</pre>
         <h2>Evidence first</h2>
