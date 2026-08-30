@@ -3,9 +3,12 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 import re
+import threading
 import time
+from collections import OrderedDict
 from pathlib import Path
 
 import httpx
@@ -16,6 +19,7 @@ from app.models import ArchaeologistNote, QueryResponse
 from app.services.analysis_store import StoredAnalysis
 
 BACKEND_DIR = Path(__file__).resolve().parents[1]
+_log = logging.getLogger("code_archaeologist.gemini")
 
 FALLBACK_MODELS = (
     "gemini-3.5-flash",
@@ -23,6 +27,13 @@ FALLBACK_MODELS = (
     "gemini-3.7-flash",
     "gemini-flash-latest",
 )
+
+# One extra attempt after a 429, then stop. Shared quota across models means
+# walking the fallback chain cannot help.
+MAX_429_RETRIES = 1
+MAX_REASONABLE_429_WAIT = 5.0
+DEFAULT_429_WAIT = 0.8
+MAX_CACHE_ENTRIES = 48
 
 INVESTIGATE_RULES = """You are Code Archaeologist, investigating Git history for a developer.
 
@@ -133,14 +144,69 @@ def _retry_delay_seconds(response: httpx.Response) -> float | None:
     return None
 
 
+def _429_wait_seconds(delay: float | None, retry_index: int, deadline: float) -> float | None:
+    """How long to wait before the single bounded 429 retry, if at all."""
+    if delay is None or delay > MAX_REASONABLE_429_WAIT:
+        wait = min(DEFAULT_429_WAIT * (2**retry_index), MAX_REASONABLE_429_WAIT)
+    else:
+        wait = delay
+    remaining = deadline - time.monotonic() - 2
+    if remaining <= 0.2:
+        return None
+    return max(0.0, min(wait, remaining))
+
+
+_call_lock = threading.Lock()
+_ai_cache: OrderedDict[str, QueryResponse] = OrderedDict()
+_cache_lock = threading.Lock()
+
+
+def _cache_key(
+    analysis_id: str,
+    question: str,
+    selected_hash: str | None,
+    selected_file: str | None,
+) -> str:
+    question_norm = " ".join(question.lower().split())
+    return "\n".join(
+        [
+            analysis_id,
+            question_norm,
+            (selected_hash or "").strip().lower(),
+            (selected_file or "").strip().lower(),
+        ]
+    )
+
+
+def clear_ai_cache() -> None:
+    with _cache_lock:
+        _ai_cache.clear()
+
+
+def _get_cached(key: str) -> QueryResponse | None:
+    with _cache_lock:
+        item = _ai_cache.get(key)
+        if item is None:
+            return None
+        _ai_cache.move_to_end(key)
+        return item.model_copy(deep=True)
+
+
+def _put_cached(key: str, response: QueryResponse) -> None:
+    if not response.ai_used or response.mode != "grounded-ai":
+        return
+    with _cache_lock:
+        _ai_cache[key] = response.model_copy(deep=True)
+        _ai_cache.move_to_end(key)
+        while len(_ai_cache) > MAX_CACHE_ENTRIES:
+            _ai_cache.popitem(last=False)
+
+
 def _call_gemini(system: str, user: str) -> tuple[dict[str, object] | str | None, str | None]:
     key = _api_key()
     if not key:
         return None, "not_configured"
     last_reason = "provider_error"
-    rate_limit_waits = 0
-    # Model fallbacks multiply the per-request timeout, so the whole chain runs
-    # against one wall-clock budget that stays inside the client timeout.
     deadline = time.monotonic() + settings.gemini_total_budget_seconds
     configs = [
         {
@@ -163,59 +229,66 @@ def _call_gemini(system: str, user: str) -> tuple[dict[str, object] | str | None
             remaining = deadline - time.monotonic()
             if remaining <= 1:
                 break
-            attempt_timeout = min(settings.gemini_timeout_seconds, remaining)
             body = {
                 "system_instruction": {"parts": [{"text": system}]},
                 "contents": [{"role": "user", "parts": [{"text": user}]}],
                 "generationConfig": generation,
             }
-            try:
-                with httpx.Client(timeout=attempt_timeout) as client:
-                    result = client.post(
-                        url,
-                        headers={
-                            "x-goog-api-key": key,
-                            "Content-Type": "application/json",
-                        },
-                        json=body,
-                    )
+            rate_retries = 0
+            while True:
+                attempt_timeout = min(settings.gemini_timeout_seconds, deadline - time.monotonic())
+                if attempt_timeout <= 1:
+                    return None, last_reason
+                try:
+                    with httpx.Client(timeout=attempt_timeout) as client:
+                        result = client.post(
+                            url,
+                            headers={
+                                "x-goog-api-key": key,
+                                "Content-Type": "application/json",
+                            },
+                            json=body,
+                        )
+                except (httpx.HTTPError, ValueError, KeyError):
+                    last_reason = "provider_error"
+                    break
                 if result.status_code in {401, 403}:
                     return None, "invalid_key"
                 if result.status_code == 404:
                     last_reason = "provider_error"
                     break
                 if result.status_code == 429:
-                    # Every fallback model shares one per-minute quota, so
-                    # walking the chain cannot help. Wait out the delay the API
-                    # gives us once, then give up and let the caller show the
-                    # retrieved Git explanation.
-                    delay = _retry_delay_seconds(result)
-                    # Observed free-tier delays run to ~17s, so allow a real
-                    # wait while leaving room for the retried request itself.
-                    budget = min(20.0, deadline - time.monotonic() - 8)
-                    if rate_limit_waits == 0 and delay is not None and delay <= budget:
-                        rate_limit_waits += 1
-                        time.sleep(delay)
-                        continue
-                    return None, "rate_limited"
+                    if rate_retries >= MAX_429_RETRIES:
+                        _log.info("Gemini request rate limited; serving deterministic fallback.")
+                        return None, "rate_limited"
+                    wait = _429_wait_seconds(
+                        _retry_delay_seconds(result), rate_retries, deadline
+                    )
+                    if wait is None:
+                        _log.info("Gemini request rate limited; serving deterministic fallback.")
+                        return None, "rate_limited"
+                    rate_retries += 1
+                    time.sleep(wait)
+                    continue
                 if result.status_code >= 400:
                     last_reason = "provider_error"
-                    continue
-                data = result.json()
-                candidates = data.get("candidates") or []
-                if not candidates:
+                    break
+                try:
+                    data = result.json()
+                    candidates = data.get("candidates") or []
+                    if not candidates:
+                        last_reason = "provider_error"
+                        break
+                    parts = (candidates[0].get("content") or {}).get("parts") or []
+                    text = "".join(str(part.get("text") or "") for part in parts).strip()
+                    if not text:
+                        last_reason = "provider_error"
+                        break
+                    parsed = _parse_json_object(text)
+                    return (parsed if parsed is not None else text), None
+                except (ValueError, KeyError, TypeError):
                     last_reason = "provider_error"
-                    continue
-                parts = (candidates[0].get("content") or {}).get("parts") or []
-                text = "".join(str(part.get("text") or "") for part in parts).strip()
-                if not text:
-                    last_reason = "provider_error"
-                    continue
-                parsed = _parse_json_object(text)
-                return (parsed if parsed is not None else text), None
-            except (httpx.HTTPError, ValueError, KeyError):
-                last_reason = "provider_error"
-                continue
+                    break
     return None, last_reason
 
 
@@ -260,8 +333,7 @@ UNAVAILABLE_NOTE = {
         "than an AI answer."
     ),
     "rate_limited": (
-        "Gemini is rate limited right now, so this is the retrieved Git explanation rather than "
-        "an AI answer. Retry in a moment for the AI rewrite."
+        "Gemini has temporarily reached its request limit. The Git evidence below is still available."
     ),
     "provider_error": (
         "Gemini did not return a usable answer, so this is the retrieved Git explanation rather "
@@ -274,6 +346,9 @@ def investigate(
     analysis: StoredAnalysis,
     question: str,
     retrieved: QueryResponse,
+    *,
+    selected_hash: str | None = None,
+    selected_file: str | None = None,
 ) -> QueryResponse:
     key_present = bool(_api_key())
     base = {
@@ -284,9 +359,6 @@ def investigate(
         "related_files": retrieved.related_files,
         "ai_available": key_present,
     }
-    # The deterministic retrieval is always the floor. Whatever happens to the
-    # provider, the finding panel must never render an empty answer, and the
-    # fallback must never be labelled as an AI answer.
     grounded = (retrieved.answer or retrieved.retrieval_summary or "").strip()
 
     def unavailable(reason: str) -> QueryResponse:
@@ -300,48 +372,62 @@ def investigate(
             **base,
         )
 
-    if not key_present:
-        return unavailable("not_configured")
+    cache_key = _cache_key(analysis.analysis_id, question, selected_hash, selected_file)
+    cached = _get_cached(cache_key)
+    if cached is not None:
+        return cached
 
-    payload = _evidence_payload(analysis, retrieved)
-    user = f"Question:\n{question}\n\nEvidence:\n{json.dumps(payload, ensure_ascii=True)}"
-    result, reason = _call_gemini(INVESTIGATE_RULES, user)
-    if result is None:
-        return unavailable(reason or "provider_error")
-    if isinstance(result, str):
-        return QueryResponse(
+    with _call_lock:
+        cached = _get_cached(cache_key)
+        if cached is not None:
+            return cached
+        if not key_present:
+            return unavailable("not_configured")
+
+        payload = _evidence_payload(analysis, retrieved)
+        user = f"Question:\n{question}\n\nEvidence:\n{json.dumps(payload, ensure_ascii=True)}"
+        result, reason = _call_gemini(INVESTIGATE_RULES, user)
+        if result is None:
+            return unavailable(reason or "provider_error")
+        if isinstance(result, str):
+            response = QueryResponse(
+                mode="grounded-ai",
+                answer=result,
+                ai_used=True,
+                confidence="medium",
+                why="The model returned an explanation grounded in the retrieved commits.",
+                **base,
+            )
+            _put_cached(cache_key, response)
+            return response
+        answer = str(result.get("answer") or "").strip()
+        if not answer:
+            return unavailable("provider_error")
+        confidence = str(result.get("confidence") or "medium").lower()
+        if confidence not in {"high", "medium", "low"}:
+            confidence = "medium"
+        follow_raw = result.get("follow_ups") or []
+        follow_ups = [str(item).strip() for item in follow_raw if str(item).strip()][:4]
+        if not follow_ups:
+            follow_ups = [
+                "Which commit is the strongest evidence?",
+                "Explain this finding to someone new to the codebase.",
+            ]
+        response = QueryResponse(
             mode="grounded-ai",
-            answer=result,
+            answer=answer,
             ai_used=True,
-            confidence="medium",
-            why="The model returned an explanation grounded in the retrieved commits.",
+            confidence=confidence,
+            why=str(result.get("why") or "").strip() or None,
+            follow_ups=follow_ups,
             **base,
         )
-    answer = str(result.get("answer") or "").strip()
-    if not answer:
-        return unavailable("provider_error")
-    confidence = str(result.get("confidence") or "medium").lower()
-    if confidence not in {"high", "medium", "low"}:
-        confidence = "medium"
-    follow_raw = result.get("follow_ups") or []
-    follow_ups = [str(item).strip() for item in follow_raw if str(item).strip()][:4]
-    if not follow_ups:
-        follow_ups = [
-            "Which commit is the strongest evidence?",
-            "Explain this finding to someone new to the codebase.",
-        ]
-    return QueryResponse(
-        mode="grounded-ai",
-        answer=answer,
-        ai_used=True,
-        confidence=confidence,
-        why=str(result.get("why") or "").strip() or None,
-        follow_ups=follow_ups,
-        **base,
-    )
+        _put_cached(cache_key, response)
+        return response
 
 
 def generate_ai_notes(analysis: StoredAnalysis) -> list[ArchaeologistNote]:
+    """Optional Gemini notes. The UI does not call this after analysis."""
     if not _api_key():
         return []
     payload = {
@@ -359,7 +445,8 @@ def generate_ai_notes(analysis: StoredAnalysis) -> list[ArchaeologistNote]:
             for commit in analysis.commits[:12]
         ],
     }
-    result, _reason = _call_gemini(NOTES_RULES, json.dumps(payload, ensure_ascii=True))
+    with _call_lock:
+        result, _reason = _call_gemini(NOTES_RULES, json.dumps(payload, ensure_ascii=True))
     if not isinstance(result, dict):
         return []
     raw_notes = result.get("notes") or []

@@ -33,11 +33,14 @@ export default function EvidencePanel({
         {unavailable ? <span className="ai-note">retrieved from Git history, not AI</span> : null}
       </h2>
       {unavailable ? (
-        <div className="notice" role="status">
+        <div
+          className={result.unavailable_reason === "rate_limited" ? "notice is-capacity" : "notice"}
+          role="status"
+        >
           <p>{unavailableTitle(result.unavailable_reason)}</p>
           <p>{unavailableBody(result.unavailable_reason)}</p>
           <button className="ghost-btn" type="button" onClick={onRetry} disabled={loading}>
-            Retry with AI
+            Retry AI
           </button>
         </div>
       ) : null}

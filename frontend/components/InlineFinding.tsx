@@ -46,8 +46,10 @@ export default function InlineFinding({ ask, onSelectHash, onRetry }: InlineFind
     <div className="inline-finding" aria-live="polite">
       {fallback ? (
         <p className="form-hint">
-          {unavailableTitle(ask.result.unavailable_reason)} Showing the retrieved Git history
-          explanation instead.
+          {unavailableTitle(ask.result.unavailable_reason)}{" "}
+          {ask.result.unavailable_reason === "rate_limited"
+            ? "The Git evidence below is still available."
+            : "Showing the retrieved Git history explanation instead."}
         </p>
       ) : null}
       {text ? (
@@ -57,7 +59,7 @@ export default function InlineFinding({ ask, onSelectHash, onRetry }: InlineFind
       )}
       {fallback ? (
         <button className="ghost-btn" type="button" onClick={onRetry}>
-          Retry with AI
+          Retry AI
         </button>
       ) : null}
       {!fallback && ask.result.confidence ? (

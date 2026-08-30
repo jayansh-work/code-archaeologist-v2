@@ -2,14 +2,12 @@ import type { ArchaeologistNote } from "@/lib/types";
 
 type ArchaeologistNotesProps = {
   notes: ArchaeologistNote[];
-  loadingAi: boolean;
   onSelectHash: (hash: string) => void;
   onSelectFile: (path: string) => void;
 };
 
 export default function ArchaeologistNotes({
   notes,
-  loadingAi,
   onSelectHash,
   onSelectFile,
 }: ArchaeologistNotesProps) {
@@ -17,7 +15,6 @@ export default function ArchaeologistNotes({
     <section className="notes" aria-labelledby="notes-heading">
       <h2 id="notes-heading" className="section-title">
         Archaeologist notes
-        {loadingAi ? <span className="ai-note">Tracing additional observations…</span> : null}
       </h2>
       <ul className="notes-list">
         {notes.map((note) => (

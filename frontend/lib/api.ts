@@ -1,12 +1,11 @@
 import { site } from "@/lib/site";
-import type { AnalyzeResponse, NotesResponse, QueryResponse } from "@/lib/types";
+import type { AnalyzeResponse, QueryResponse } from "@/lib/types";
 
 const ANALYZE_TIMEOUT_MS = 90_000;
 // Both query paths may call Gemini, whose whole fallback chain is capped at
 // 40s server-side. Staying above that keeps the backend's own calm fallback
 // visible instead of a browser timeout.
 const QUERY_TIMEOUT_MS = 60_000;
-const NOTES_TIMEOUT_MS = 60_000;
 
 /** Thrown when a caller-supplied signal aborts, e.g. a newer analysis started. */
 export class RequestCancelledError extends Error {
@@ -132,17 +131,5 @@ export function queryRepository(
     },
     QUERY_TIMEOUT_MS,
     options.signal,
-  );
-}
-
-export function fetchAiNotes(analysisId: string, signal?: AbortSignal): Promise<NotesResponse> {
-  return request<NotesResponse>(
-    "/notes",
-    {
-      method: "POST",
-      body: JSON.stringify({ analysis_id: analysisId }),
-    },
-    NOTES_TIMEOUT_MS,
-    signal,
   );
 }

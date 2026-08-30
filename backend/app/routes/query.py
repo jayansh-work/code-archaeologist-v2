@@ -26,7 +26,13 @@ def query(payload: QueryRequest) -> QueryResponse:
         focus_hashes=focus_hashes,
         focus_file=payload.selected_file,
     )
-    result = investigate(analysis, payload.question, retrieved)
+    result = investigate(
+        analysis,
+        payload.question,
+        retrieved,
+        selected_hash=payload.selected_hash,
+        selected_file=payload.selected_file,
+    )
     if payload.record_history:
         store.append_turn(
             payload.analysis_id,

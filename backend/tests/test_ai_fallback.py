@@ -197,3 +197,117 @@ def test_retry_delay_parsing() -> None:
 
     none = httpx.Response(429, request=httpx.Request("POST", "https://example.test"), json={})
     assert gemini._retry_delay_seconds(none) is None
+
+
+def test_429_then_success_uses_the_retry(monkeypatch) -> None:
+    calls: list[int] = []
+
+    def fake_post(self, url, **kwargs):  # noqa: ANN001, ANN202
+        calls.append(1)
+        if len(calls) == 1:
+            return httpx.Response(
+                429,
+                request=httpx.Request("POST", url),
+                json={"error": {"details": [{"retryDelay": "0.01s"}]}},
+            )
+        return httpx.Response(
+            200,
+            request=httpx.Request("POST", url),
+            json={"candidates": [{"content": {"parts": [{"text": "Commit [aaaaaaa] did it."}]}}]},
+        )
+
+    monkeypatch.setattr(gemini, "_api_key", lambda: "test-key")
+    monkeypatch.setattr(httpx.Client, "post", fake_post)
+    monkeypatch.setattr(gemini.time, "sleep", lambda _seconds: None)
+
+    result, reason = gemini._call_gemini("system", "user")
+    assert reason is None
+    assert result == "Commit [aaaaaaa] did it."
+    assert len(calls) == 2
+
+
+def test_repeated_429_stops_after_one_retry(monkeypatch) -> None:
+    calls: list[int] = []
+
+    def fake_post(self, url, **kwargs):  # noqa: ANN001, ANN202
+        calls.append(1)
+        return httpx.Response(429, request=httpx.Request("POST", url), json={})
+
+    monkeypatch.setattr(gemini, "_api_key", lambda: "test-key")
+    monkeypatch.setattr(httpx.Client, "post", fake_post)
+    monkeypatch.setattr(gemini.time, "sleep", lambda _seconds: None)
+
+    result, reason = gemini._call_gemini("system", "user")
+    assert result is None
+    assert reason == "rate_limited"
+    assert len(calls) == 2
+
+
+def test_identical_questions_are_cached(monkeypatch) -> None:
+    calls: list[int] = []
+
+    def fake(_system: str, user: str) -> tuple[dict[str, object], None]:
+        calls.append(1)
+        return {"answer": "Commit [aaaaaaa] changed src/auth.py.", "confidence": "high"}, None
+
+    monkeypatch.setattr(gemini, "_api_key", lambda: "test-key")
+    monkeypatch.setattr(gemini, "_call_gemini", fake)
+
+    first = _investigate()
+    second = _investigate()
+    assert first.ai_used is True
+    assert second.ai_used is True
+    assert second.answer == first.answer
+    assert len(calls) == 1
+
+
+def test_cache_does_not_reuse_a_different_file_context(monkeypatch) -> None:
+    calls: list[str] = []
+
+    def fake(_system: str, user: str) -> tuple[dict[str, object], None]:
+        calls.append(user)
+        return {"answer": f"Commit [aaaaaaa] for {len(calls)}.", "confidence": "high"}, None
+
+    monkeypatch.setattr(gemini, "_api_key", lambda: "test-key")
+    monkeypatch.setattr(gemini, "_call_gemini", fake)
+    analysis = _analysis()
+    retrieved = answer_question(analysis, QUESTION)
+    gemini.investigate(analysis, QUESTION, retrieved, selected_file="src/auth.py")
+    gemini.investigate(analysis, QUESTION, retrieved, selected_file="README.md")
+    assert len(calls) == 2
+
+
+def test_query_endpoint_survives_429(monkeypatch) -> None:
+    from fastapi.testclient import TestClient
+
+    from app.main import app
+    from app.store import store
+
+    analysis = _analysis()
+    store.put(analysis)
+    monkeypatch.setattr(gemini, "_api_key", lambda: "test-key")
+    monkeypatch.setattr(gemini, "_call_gemini", lambda _system, _user: (None, "rate_limited"))
+
+    client = TestClient(app)
+    response = client.post(
+        "/query",
+        json={"analysis_id": analysis.analysis_id, "question": QUESTION},
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["unavailable_reason"] == "rate_limited"
+    assert body["ai_used"] is False
+    assert body["evidence"]
+    assert "src/auth.py" in body["answer"]
+
+
+def test_analyze_route_does_not_import_gemini() -> None:
+    from pathlib import Path
+
+    source = Path("app/routes/analyze.py").read_text(encoding="utf-8")
+    assert "gemini" not in source
+    assert "generate_ai_notes" not in source
+    frontend = Path(__file__).resolve().parents[2] / "frontend" / "components" / "InvestigationApp.tsx"
+    ui = frontend.read_text(encoding="utf-8")
+    assert "fetchAiNotes" not in ui
+

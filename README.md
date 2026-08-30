@@ -33,7 +33,7 @@ The product has three layers:
 - Show commit hashes, messages, authors, timestamps, changed file paths, additions, and deletions
 - Interactive repository-evolution flowchart (real commits only, arrows wrap to stay on the page)
 - Butterfly effect: later commits that reused the same files as a selected change
-- Archaeologist notes from the analyzed window, with optional AI additions
+- Archaeologist notes from the analyzed window (deterministic Git evidence only; Gemini quota is reserved for Ask Code Archaeologist)
 - Expand a commit to inspect changed files
 - Filter/search the commit list locally
 - Ask Code Archaeologist in natural language after analysis
@@ -244,13 +244,14 @@ It is labelled `retrieved from Git history, not AI` and reports why:
 | --- | --- |
 | `not_configured` | No key in `backend/.env` |
 | `invalid_key` | Gemini rejected the key |
-| `rate_limited` | Free-tier quota reached. Wait and use **Retry with AI** |
+| `rate_limited` | Free-tier quota reached. Git evidence stays on screen. Use **Retry AI** only if you want another model call. |
 | `provider_error` | The model returned nothing usable |
 
 The free Gemini tier is capped at roughly 20 requests per rolling window per model, which is easy
-to hit while rehearsing. The app honours the retry delay the API returns once, then falls back
-calmly rather than hanging. Every async request is also bound to its analysis, so a late answer
-from a previous repository can never appear under a new one.
+to hit while rehearsing. Analyzing a repository does **not** call Gemini. Identical questions in
+the same session reuse a bounded in-memory cache. Concurrent Ask buttons share one Gemini slot.
+On HTTP 429 the API waits once if Retry-After is short, retries once, then serves the retrieved
+Git explanation. The UI labels that as AI temporarily at capacity, not as a repository failure.
 
 Requests never block each other's UI: the flowchart, commit history, and notes stay usable while a
 query is running.

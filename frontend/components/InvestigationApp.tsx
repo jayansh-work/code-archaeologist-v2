@@ -15,7 +15,7 @@ import RepositoryForm from "@/components/RepositoryForm";
 import RepositoryQuery from "@/components/RepositoryQuery";
 import RepositorySummary from "@/components/RepositorySummary";
 import TeamCredits from "@/components/TeamCredits";
-import { analyzeRepository, fetchAiNotes, isCancelled, queryRepository } from "@/lib/api";
+import { analyzeRepository, isCancelled, queryRepository } from "@/lib/api";
 import type { InlineAskState } from "@/lib/inlineAsk";
 import type { ArchaeologistNote, AnalyzeResponse, CommitEvidence, QueryResponse } from "@/lib/types";
 import { validateGithubRepoUrl } from "@/lib/validation";
@@ -35,7 +35,6 @@ export default function InvestigationApp() {
   const [reanalyzeError, setReanalyzeError] = useState<string | null>(null);
   const [analysis, setAnalysis] = useState<AnalyzeResponse | null>(null);
   const [notes, setNotes] = useState<ArchaeologistNote[]>([]);
-  const [notesLoading, setNotesLoading] = useState(false);
   const [question, setQuestion] = useState("");
   const [queryStatus, setQueryStatus] = useState<QueryStatus>("idle");
   const [queryError, setQueryError] = useState<string | null>(null);
@@ -159,22 +158,6 @@ export default function InvestigationApp() {
       lastQuestion.current = "";
       setStatus("success");
       setShowAnother(false);
-      setNotesLoading(true);
-      void fetchAiNotes(result.analysis_id, scope.signal)
-        .then((extra) => {
-          if (!owns(result.analysis_id) || extra.notes.length === 0) {
-            return;
-          }
-          setNotes((current) => [...current, ...extra.notes]);
-        })
-        .catch(() => {
-          // Deterministic notes are already on screen.
-        })
-        .finally(() => {
-          if (owns(result.analysis_id)) {
-            setNotesLoading(false);
-          }
-        });
     } catch (caught) {
       const message =
         caught instanceof Error ? caught.message : "Repository could not be analyzed.";
@@ -213,6 +196,9 @@ export default function InvestigationApp() {
     if (!nextQuestion) {
       setQueryStatus("error");
       setQueryError("Enter a question about this repository.");
+      return;
+    }
+    if (queryStatus === "loading" && lastQuestion.current === nextQuestion) {
       return;
     }
     const analysisId = analysis.analysis_id;
@@ -474,7 +460,6 @@ export default function InvestigationApp() {
 
             <ArchaeologistNotes
               notes={notes}
-              loadingAi={notesLoading}
               onSelectHash={(hash) => selectCommit(hash, true)}
               onSelectFile={setFileFilter}
             />

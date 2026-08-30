@@ -13,6 +13,9 @@ def notes(payload: NotesRequest) -> NotesResponse:
     analysis = store.get(payload.analysis_id)
     if analysis is None:
         raise AnalysisNotFoundError()
+    # Kept for optional callers. The investigation UI does not request AI
+    # notes after analysis so Gemini quota stays available for Ask questions.
     if not gemini_available():
         return NotesResponse(notes=[], ai_used=False)
-    return NotesResponse(notes=generate_ai_notes(analysis), ai_used=True)
+    extra = generate_ai_notes(analysis)
+    return NotesResponse(notes=extra, ai_used=bool(extra))

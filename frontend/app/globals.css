@@ -404,6 +404,10 @@ button {
   font-size: 12px;
 }
 
+.notice.is-capacity {
+  border-left-color: var(--text-muted);
+}
+
 .focus-list {
   margin-top: 40px;
   padding-top: 20px;

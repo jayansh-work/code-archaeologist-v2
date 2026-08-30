@@ -17,7 +17,7 @@ export function unavailableTitle(reason: string | null | undefined): string {
     case "invalid_key":
       return "Gemini rejected the API key.";
     case "rate_limited":
-      return "Gemini is rate limited right now.";
+      return "AI temporarily at capacity";
     default:
       return "AI investigation is temporarily unavailable.";
   }
@@ -30,7 +30,7 @@ export function unavailableBody(reason: string | null | undefined): string {
     case "invalid_key":
       return "Check GEMINI_API_KEY in backend/.env. The retrieved Git evidence below is unaffected.";
     case "rate_limited":
-      return "The free Gemini tier allows a limited number of requests per minute. Wait a moment and retry for the AI explanation. The retrieved Git evidence below is unaffected.";
+      return "Gemini has temporarily reached its request limit. The Git evidence below is still available.";
     default:
       return "The retrieved Git evidence below is unaffected.";
   }

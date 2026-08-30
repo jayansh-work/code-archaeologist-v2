@@ -63,9 +63,9 @@ The query engine matches questions to intents (most-changed files, largest commi
 
 Retrieval is lightweight and lexical: commit messages, file paths, authors, short hashes, change magnitude, recency, and explicit user-selected context. There is no embedding model or vector store. When a question matches nothing lexically, retrieval returns a bounded, diverse sample — the most recent commits plus the highest-churn commits — and states that the window is limited, so the explanation layer never runs with zero evidence.
 
-If `GEMINI_API_KEY` is set, Gemini may rewrite the answer using only the retrieved evidence JSON. It is not given the whole repository or any file contents. Its system instructions forbid inventing hashes, files, authors, timestamps, or statistics, and require it to say when evidence is insufficient.
+If `GEMINI_API_KEY` is set, Gemini may rewrite the answer using only the retrieved evidence JSON. It is not given the whole repository or any file contents. Analyzing a repository never calls Gemini; quota is reserved for explicit Ask questions. Identical questions in a session reuse a bounded in-memory cache. All Gemini calls in the process share one lock so Ask buttons cannot burst the free-tier quota. HTTP 429 is retried at most once, then the deterministic retrieval is returned.
 
-The deterministic explanation is always attached to the response, so a failure at the model layer degrades the answer instead of emptying it. When AI does not contribute, the response reports `mode: ai-unavailable`, `ai_used: false`, and a reason (`not_configured`, `invalid_key`, `rate_limited`, `provider_error`), and the UI labels the text as retrieved from Git history rather than AI. The model-fallback chain runs against a single wall-clock budget that stays inside the browser's query timeout, so the API always answers before the client gives up.
+The deterministic explanation is always attached to the response, so a failure at the model layer degrades the answer instead of emptying it. When AI does not contribute, the response reports `mode: ai-unavailable`, `ai_used: false`, and a reason (`not_configured`, `invalid_key`, `rate_limited`, `provider_error`), and the UI labels the text as retrieved from Git history rather than AI. A rate-limit notice is a capacity message, not a repository failure.
 
 ## Ask scope
 
