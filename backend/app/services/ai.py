@@ -9,16 +9,14 @@ import re
 import threading
 import time
 from collections import OrderedDict
-from pathlib import Path
 
 import httpx
 from dotenv import load_dotenv
 
-from app.config import settings
+from app.config import BACKEND_DIR, settings
 from app.models import ArchaeologistNote, QueryResponse
 from app.services.analysis_store import StoredAnalysis
 
-BACKEND_DIR = Path(__file__).resolve().parents[1]
 _log = logging.getLogger("code_archaeologist.ai")
 
 OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
