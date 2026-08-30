@@ -2,28 +2,35 @@
 
 import { useState } from "react";
 
+import InlineFinding from "@/components/InlineFinding";
 import { changeTypeLabel, copyText, formatCount, formatRelative, formatTimestamp } from "@/lib/format";
+import { commitQuestion, commitSlot, fileQuestion, fileSlot, type InlineAskState } from "@/lib/inlineAsk";
 import type { CommitEvidence } from "@/lib/types";
 
 type CommitRowProps = {
   commit: CommitEvidence;
   open: boolean;
+  asks: Record<string, InlineAskState>;
   onToggle: () => void;
-  onAsk: () => void;
-  onAskFile: (path: string) => void;
+  onAsk: (slot: string, question: string, commit: CommitEvidence, file?: string) => void;
   onSelectFile: (path: string) => void;
+  onSelectHash: (hash: string) => void;
 };
 
 export default function CommitRow({
   commit,
   open,
+  asks,
   onToggle,
   onAsk,
-  onAskFile,
   onSelectFile,
+  onSelectHash,
 }: CommitRowProps) {
   const panelId = `commit-${commit.hash}`;
   const [copied, setCopied] = useState(false);
+  const slot = commitSlot(commit.hash);
+  const ask = asks[slot];
+  const question = commitQuestion(commit.short_hash);
 
   return (
     <li className={open ? "commit-row is-open" : "commit-row"}>
@@ -71,10 +78,20 @@ export default function CommitRow({
             >
               {copied ? "Copied" : "Copy hash"}
             </button>
-            <button className="ghost-btn" type="button" onClick={onAsk}>
-              Ask AI about this commit
+            <button
+              className="ghost-btn"
+              type="button"
+              disabled={ask?.status === "loading"}
+              onClick={() => onAsk(slot, question, commit)}
+            >
+              {ask?.status === "loading" ? "Asking AI…" : "Ask AI about this commit"}
             </button>
           </div>
+          <InlineFinding
+            ask={ask}
+            onSelectHash={onSelectHash}
+            onRetry={() => onAsk(slot, ask?.question || question, commit)}
+          />
           <table className="file-table">
             <caption className="status-live">Changed files</caption>
             <thead>
@@ -90,28 +107,94 @@ export default function CommitRow({
                   <td colSpan={3}>No file-level changes were recorded for this commit.</td>
                 </tr>
               ) : (
-                commit.files.map((file) => (
-                  <tr key={file.path}>
-                    <td className="kind">{changeTypeLabel(file.change_type)}</td>
-                    <td>
-                      <button className="link-btn file-path" type="button" onClick={() => onSelectFile(file.path)}>
-                        {file.path}
-                      </button>
-                      <button className="link-btn" type="button" onClick={() => onAskFile(file.path)}>
-                        Ask AI about this file
-                      </button>
-                    </td>
-                    <td className="churn">
-                      <span className="add">+{formatCount(file.additions)}</span>{" "}
-                      <span className="del">-{formatCount(file.deletions)}</span>
-                    </td>
-                  </tr>
-                ))
+                commit.files.map((file) => {
+                  const explainSlot = fileSlot(commit.hash, file.path);
+                  const fileAsk = asks[explainSlot];
+                  const filePrompt = fileQuestion(file.path);
+                  return (
+                    <FileRows
+                      key={file.path}
+                      commit={commit}
+                      path={file.path}
+                      changeType={file.change_type}
+                      additions={file.additions}
+                      deletions={file.deletions}
+                      slot={explainSlot}
+                      ask={fileAsk}
+                      question={filePrompt}
+                      onAsk={onAsk}
+                      onSelectFile={onSelectFile}
+                      onSelectHash={onSelectHash}
+                    />
+                  );
+                })
               )}
             </tbody>
           </table>
         </div>
       ) : null}
     </li>
+  );
+}
+
+function FileRows({
+  commit,
+  path,
+  changeType,
+  additions,
+  deletions,
+  slot,
+  ask,
+  question,
+  onAsk,
+  onSelectFile,
+  onSelectHash,
+}: {
+  commit: CommitEvidence;
+  path: string;
+  changeType: string | null;
+  additions: number;
+  deletions: number;
+  slot: string;
+  ask: InlineAskState | undefined;
+  question: string;
+  onAsk: (slot: string, question: string, commit: CommitEvidence, file?: string) => void;
+  onSelectFile: (path: string) => void;
+  onSelectHash: (hash: string) => void;
+}) {
+  return (
+    <>
+      <tr>
+        <td className="kind">{changeTypeLabel(changeType)}</td>
+        <td>
+          <button className="link-btn file-path" type="button" onClick={() => onSelectFile(path)}>
+            {path}
+          </button>
+          <button
+            className="link-btn"
+            type="button"
+            disabled={ask?.status === "loading"}
+            onClick={() => onAsk(slot, question, commit, path)}
+          >
+            {ask?.status === "loading" ? "Asking AI…" : "Ask AI about this file"}
+          </button>
+        </td>
+        <td className="churn">
+          <span className="add">+{formatCount(additions)}</span>{" "}
+          <span className="del">-{formatCount(deletions)}</span>
+        </td>
+      </tr>
+      {ask ? (
+        <tr>
+          <td colSpan={3}>
+            <InlineFinding
+              ask={ask}
+              onSelectHash={onSelectHash}
+              onRetry={() => onAsk(slot, ask.question || question, commit, path)}
+            />
+          </td>
+        </tr>
+      ) : null}
+    </>
   );
 }

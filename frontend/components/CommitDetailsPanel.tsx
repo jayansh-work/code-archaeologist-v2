@@ -2,7 +2,13 @@
 
 import InlineFinding from "@/components/InlineFinding";
 import { changeTypeLabel, copyText, formatCount, formatRelative, formatTimestamp } from "@/lib/format";
-import { commitSlot, fileSlot, type InlineAskState } from "@/lib/inlineAsk";
+import {
+  commitQuestion,
+  commitSlot,
+  fileQuestion,
+  fileSlot,
+  type InlineAskState,
+} from "@/lib/inlineAsk";
 import type { CommitEvidence } from "@/lib/types";
 
 type CommitDetailsPanelProps = {
@@ -74,13 +80,7 @@ export default function CommitDetailsPanel({
           className="ghost-btn"
           type="button"
           disabled={askCommit?.status === "loading"}
-          onClick={() =>
-            onAsk(
-              commitSlot(commit.hash),
-              `In plain English, explain what changed in commit ${commit.short_hash} and what the Git history shows about those changes.`,
-              commit,
-            )
-          }
+          onClick={() => onAsk(commitSlot(commit.hash), commitQuestion(commit.short_hash), commit)}
         >
           {askCommit?.status === "loading" ? "Asking AI…" : "Ask AI about this commit"}
         </button>
@@ -91,8 +91,7 @@ export default function CommitDetailsPanel({
         onRetry={() =>
           onAsk(
             commitSlot(commit.hash),
-            askCommit?.question ??
-              `In plain English, explain what changed in commit ${commit.short_hash} and what the Git history shows about those changes.`,
+            askCommit?.question || commitQuestion(commit.short_hash),
             commit,
           )
         }
@@ -158,7 +157,7 @@ function FileAskRows({
   onAsk: (slot: string, question: string, commit: CommitEvidence, file?: string) => void;
 }) {
   const explainSlot = fileSlot(commit.hash, path);
-  const question = `Explain the file ${path} in plain English. What is it, and how did it change in the analyzed Git history?`;
+  const question = fileQuestion(path);
   return (
     <>
       <tr>

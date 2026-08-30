@@ -82,6 +82,12 @@ def test_file_history_auth() -> None:
     assert result.evidence[0].short_hash == "aaaaaaa"
 
 
+def test_explicit_file_still_uses_file_history() -> None:
+    result = answer_question(_analysis(), "Show the history of README.md")
+    assert result.intent == "file_history"
+    assert any("README.md" in item.files for item in result.evidence)
+
+
 def test_hash_lookup() -> None:
     result = answer_question(_analysis(), "Look up commit bbbbbbb")
     assert result.intent == "commit_lookup"
@@ -135,6 +141,13 @@ def test_unmatched_question_returns_diverse_evidence() -> None:
     assert len(result.evidence) <= 8
     assert "No analyzed commit" in result.answer
     assert "latest commits only" in result.answer
+
+
+def test_frontend_repeated_changes_is_not_a_single_file_lookup() -> None:
+    """A broad 'modified' question must not collapse onto one accidental path."""
+    result = answer_question(_analysis(), "What parts of the frontend were modified repeatedly?")
+    assert result.intent == "most_changed_files"
+    assert result.evidence
 
 
 def test_unmatched_question_on_empty_history() -> None:

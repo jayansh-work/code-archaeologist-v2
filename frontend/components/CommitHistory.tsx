@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 
 import CommitRow from "@/components/CommitRow";
+import type { InlineAskState } from "@/lib/inlineAsk";
 import type { CommitEvidence } from "@/lib/types";
 
 type SortMode = "recent" | "largest";
@@ -11,20 +12,20 @@ type CommitHistoryProps = {
   commits: CommitEvidence[];
   selectedHash: string | null;
   fileFilter: string;
+  asks: Record<string, InlineAskState>;
   onFileFilterChange: (value: string) => void;
   onSelectHash: (hash: string | null) => void;
-  onAsk: (commit: CommitEvidence) => void;
-  onAskFile: (path: string) => void;
+  onAsk: (slot: string, question: string, commit: CommitEvidence, file?: string) => void;
 };
 
 export default function CommitHistory({
   commits,
   selectedHash,
   fileFilter,
+  asks,
   onFileFilterChange,
   onSelectHash,
   onAsk,
-  onAskFile,
 }: CommitHistoryProps) {
   const [search, setSearch] = useState("");
   const [author, setAuthor] = useState("all");
@@ -131,10 +132,11 @@ export default function CommitHistory({
               key={commit.hash}
               commit={commit}
               open={selectedHash === commit.hash}
+              asks={asks}
               onToggle={() => onSelectHash(selectedHash === commit.hash ? null : commit.hash)}
-              onAsk={() => onAsk(commit)}
-              onAskFile={onAskFile}
+              onAsk={onAsk}
               onSelectFile={onFileFilterChange}
+              onSelectHash={(hash) => onSelectHash(hash)}
             />
           ))}
         </ul>

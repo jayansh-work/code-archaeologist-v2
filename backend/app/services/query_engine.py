@@ -177,6 +177,10 @@ def _intent(question: str) -> str:
             "hotspots",
             "most frequently changed",
             "most active",
+            "modified repeatedly",
+            "changed repeatedly",
+            "parts of the frontend",
+            "parts of the backend",
         )
     ):
         return "most_changed_files"
@@ -246,7 +250,7 @@ def _intent(question: str) -> str:
     ):
         return "overview"
     if PATHISH_RE.search(question) or any(
-        phrase in q for phrase in ("history for", "history of", "when was", "modified", "this file")
+        phrase in q for phrase in ("history for", "history of", "when was", "this file")
     ):
         return "file_history"
     if any(phrase in q for phrase in ("commits by", "author", "written by", "committed by")):

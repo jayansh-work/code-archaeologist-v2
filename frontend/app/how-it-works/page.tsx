@@ -21,20 +21,22 @@ export default function HowItWorksPage() {
         <p>
           The investigation workspace shows a repository evolution flowchart of the analyzed commits.
           Arrows run left-to-right and wrap downward so the graph stays on the page. Selecting a
-          node reveals commit details and a butterfly effect: if later commits edited the same files,
-          the original change rippled forward. Ask AI under those panels to explain the ripple or a
-          file in plain English.
+          node reveals commit details, file-level change statistics, and a butterfly effect: later
+          analyzed commits that edited the same files. That is shared file history, not proof that
+          one change caused another. Ask AI under those panels to explain the selected commit, file,
+          or butterfly in plain English.
         </p>
         <h2>3. Investigate</h2>
         <p>
-          Ask Code Archaeologist in natural language. The API retrieves relevant commits first, then
-          Gemini explains only that evidence when an API key is configured. Findings stay linked to
-          real hashes.
+          The main Ask bar is repository-wide. Selecting a commit or filtering files changes only
+          what you see. The API retrieves relevant commits first, then Gemini explains only that
+          evidence when an API key is configured. Findings stay linked to real hashes.
         </p>
         <h2>Limits</h2>
         <p>
-          Analysis covers the latest 30 commits. Git history can show what changed, when, and who
-          recorded the commit. It often cannot prove why a developer made a decision.
+          Analysis covers the latest 30 commits and shows file-level change statistics, not full
+          patch hunks. Git history can show what changed, when, and who recorded the commit. It
+          often cannot prove why a developer made a decision.
         </p>
       </main>
       <Footer />

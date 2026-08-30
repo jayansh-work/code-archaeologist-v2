@@ -23,8 +23,10 @@ Evidence retrieval
     ↓
 Optional grounded Gemini
     ↓
-Evolution graph + butterfly effect + notes + investigation view
+Evolution flowchart + butterfly effect + notes + investigation workspace
 ```
+
+Development uses `uvicorn --reload` and `next dev`. Anything demonstrated should use production mode instead — see `scripts/prepare-demo.ps1` and `scripts/demo.ps1` — so nothing recompiles or reloads mid-demo.
 
 ## Why Git CLI is used
 
@@ -57,10 +59,34 @@ Each successful analysis returns an `analysis_id`. The API keeps repository meta
 
 ## Evidence grounding
 
-The query engine matches questions to intents (most-changed files, largest commits, contributors, recent activity, file history, author search, hash lookup, butterfly effect, keyword search). Answers include the supporting commits.
+The query engine matches questions to intents (most-changed files, largest commits, contributors, recent activity, file history, author search, hash lookup, butterfly effect, overview, before-commit, keyword search). Answers include the supporting commits.
 
-If `GEMINI_API_KEY` is set, Gemini may rewrite the answer using only the retrieved evidence JSON. It is not given the whole repository. If the key is missing or the model call fails, the investigation bar reports that AI is temporarily unavailable while retrieved Git evidence remains visible. The evolution graph and commit history stay usable.
+Retrieval is lightweight and lexical: commit messages, file paths, authors, short hashes, change magnitude, recency, and explicit user-selected context. There is no embedding model or vector store. When a question matches nothing lexically, retrieval returns a bounded, diverse sample — the most recent commits plus the highest-churn commits — and states that the window is limited, so the explanation layer never runs with zero evidence.
+
+If `GEMINI_API_KEY` is set, Gemini may rewrite the answer using only the retrieved evidence JSON. It is not given the whole repository or any file contents. Its system instructions forbid inventing hashes, files, authors, timestamps, or statistics, and require it to say when evidence is insufficient.
+
+The deterministic explanation is always attached to the response, so a failure at the model layer degrades the answer instead of emptying it. When AI does not contribute, the response reports `mode: ai-unavailable`, `ai_used: false`, and a reason (`not_configured`, `invalid_key`, `rate_limited`, `provider_error`), and the UI labels the text as retrieved from Git history rather than AI. The model-fallback chain runs against a single wall-clock budget that stays inside the browser's query timeout, so the API always answers before the client gives up.
+
+## Ask scope
+
+UI filter state and AI context are separate by design. The main Ask bar is always repository-wide; selecting a commit in the flowchart or filtering the history file list changes only what is displayed. A commit or file becomes AI context only through an explicit inline action (Ask AI about this commit / file / butterfly). Those inline explanations are not recorded into the conversation history that main follow-up questions rely on.
+
+## Butterfly effect
+
+Butterfly is a deterministic historical relationship calculation over the analyzed window, implemented in `backend/app/services/butterfly.py` and mirrored in `frontend/lib/butterfly.ts` for the flowchart overlay. Both follow the same documented rules:
+
+- the origin is one analyzed commit, located by hash
+- chronology is the analyzed commit order, since `git log` returns newest-first; index 0 is newest
+- "after this change" is the indices lower than the origin, "before this change" the indices higher
+- a relationship exists only when another analyzed commit changed at least one of the origin's file paths
+- at most 8 relationships per direction
+
+Timestamp strings are never used for ordering, because commit times can carry different timezone offsets, be rewritten, or tie. Summary date ranges and before-commit queries use the same ordering rule.
+
+Butterfly reports shared file history. It does not claim causation.
 
 ## Limitation of recent-commit analysis
 
 The product analyzes the latest 30 commits (shallow clone). Totals, contributors, and file rankings describe that window only. The UI states this explicitly and does not label those figures as whole-repository totals.
+
+Change data is file-level: paths, additions, deletions, and change type. Full unified patch hunks are not extracted or rendered. Rename notation from Git (`old.py => new.py` and `src/{old => new}/file.py`) is resolved to the destination path.

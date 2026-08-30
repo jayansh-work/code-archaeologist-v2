@@ -39,3 +39,9 @@ def test_deterministic_notes_cover_window_and_hotspot() -> None:
     assert "caveat" in kinds
     assert any("src/auth.py" in note.body for note in notes)
     assert any("aaaaaaa" in note.body for note in notes)
+    butterfly = next(note for note in notes if note.kind == "butterfly")
+    assert "not proof that one change caused another" in butterfly.body
+    assert "later analyzed commit" in butterfly.body
+    # Newest-first list: two commits touch auth.py, so one later appearance
+    # after the earliest analyzed change.
+    assert "1 later" in butterfly.body

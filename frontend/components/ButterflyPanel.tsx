@@ -3,7 +3,13 @@
 import InlineFinding from "@/components/InlineFinding";
 import { BUTTERFLY_CAVEAT, computeButterfly } from "@/lib/butterfly";
 import { formatCount } from "@/lib/format";
-import { butterflySlot, fileSlot, type InlineAskState } from "@/lib/inlineAsk";
+import {
+  butterflyQuestion,
+  butterflySlot,
+  fileQuestion,
+  fileSlot,
+  type InlineAskState,
+} from "@/lib/inlineAsk";
 import type { CommitEvidence } from "@/lib/types";
 
 type ButterflyPanelProps = {
@@ -61,6 +67,8 @@ export default function ButterflyPanel({
           <div className="wing-list">
             {wings.map((path) => {
               const explainSlot = fileSlot(commit.hash, path);
+              const fileAsk = asks[explainSlot];
+              const prompt = fileQuestion(path);
               return (
                 <div key={path} className="wing-row">
                   <div className="wing-head">
@@ -70,29 +78,17 @@ export default function ButterflyPanel({
                     <button
                       className="link-btn"
                       type="button"
-                      onClick={() =>
-                        onAsk(
-                          explainSlot,
-                          `Explain the file ${path} in plain English. What is it, and how did it change in the analyzed Git history?`,
-                          commit,
-                          path,
-                        )
-                      }
+                      disabled={fileAsk?.status === "loading"}
+                      onClick={() => onAsk(explainSlot, prompt, commit, path)}
                     >
-                      Explain this file
+                      {fileAsk?.status === "loading" ? "Asking AI…" : "Explain this file"}
                     </button>
                   </div>
                   <InlineFinding
-                    ask={asks[explainSlot]}
+                    ask={fileAsk}
                     onSelectHash={onSelectHash}
                     onRetry={() =>
-                      onAsk(
-                        explainSlot,
-                        asks[explainSlot]?.question ??
-                          `Explain the file ${path} in plain English. What is it, and how did it change in the analyzed Git history?`,
-                        commit,
-                        path,
-                      )
+                      onAsk(explainSlot, fileAsk?.question || prompt, commit, path)
                     }
                   />
                 </div>
@@ -122,13 +118,7 @@ export default function ButterflyPanel({
           className="ghost-btn"
           type="button"
           disabled={ask?.status === "loading"}
-          onClick={() =>
-            onAsk(
-              slot,
-              `In plain English, explain the butterfly effect of commit ${commit.short_hash}. Which later work reused the same files?`,
-              commit,
-            )
-          }
+          onClick={() => onAsk(slot, butterflyQuestion(commit.short_hash), commit)}
         >
           {ask?.status === "loading" ? "Asking AI…" : "Ask AI about this butterfly"}
         </button>
@@ -137,12 +127,7 @@ export default function ButterflyPanel({
         ask={ask}
         onSelectHash={onSelectHash}
         onRetry={() =>
-          onAsk(
-            slot,
-            ask?.question ??
-              `In plain English, explain the butterfly effect of commit ${commit.short_hash}. Which later work reused the same files?`,
-            commit,
-          )
+          onAsk(slot, ask?.question || butterflyQuestion(commit.short_hash), commit)
         }
       />
     </aside>

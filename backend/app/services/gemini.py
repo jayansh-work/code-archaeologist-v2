@@ -111,11 +111,34 @@ def _parse_json_object(text: str) -> dict[str, object] | None:
     return data if isinstance(data, dict) else None
 
 
+def _retry_delay_seconds(response: httpx.Response) -> float | None:
+    """Read the retry hint Gemini returns with a 429, if it is usable."""
+    header = response.headers.get("retry-after")
+    if header:
+        try:
+            return max(0.0, float(header))
+        except ValueError:
+            pass
+    try:
+        details = (response.json().get("error") or {}).get("details") or []
+    except ValueError:
+        return None
+    for detail in details:
+        if not isinstance(detail, dict):
+            continue
+        raw = str(detail.get("retryDelay") or "")
+        match = re.match(r"^([0-9]*\.?[0-9]+)s$", raw)
+        if match:
+            return max(0.0, float(match.group(1)))
+    return None
+
+
 def _call_gemini(system: str, user: str) -> tuple[dict[str, object] | str | None, str | None]:
     key = _api_key()
     if not key:
         return None, "not_configured"
     last_reason = "provider_error"
+    rate_limit_waits = 0
     # Model fallbacks multiply the per-request timeout, so the whole chain runs
     # against one wall-clock budget that stays inside the client timeout.
     deadline = time.monotonic() + settings.gemini_total_budget_seconds
@@ -161,6 +184,20 @@ def _call_gemini(system: str, user: str) -> tuple[dict[str, object] | str | None
                 if result.status_code == 404:
                     last_reason = "provider_error"
                     break
+                if result.status_code == 429:
+                    # Every fallback model shares one per-minute quota, so
+                    # walking the chain cannot help. Wait out the delay the API
+                    # gives us once, then give up and let the caller show the
+                    # retrieved Git explanation.
+                    delay = _retry_delay_seconds(result)
+                    # Observed free-tier delays run to ~17s, so allow a real
+                    # wait while leaving room for the retried request itself.
+                    budget = min(20.0, deadline - time.monotonic() - 8)
+                    if rate_limit_waits == 0 and delay is not None and delay <= budget:
+                        rate_limit_waits += 1
+                        time.sleep(delay)
+                        continue
+                    return None, "rate_limited"
                 if result.status_code >= 400:
                     last_reason = "provider_error"
                     continue
@@ -213,6 +250,26 @@ def _evidence_payload(analysis: StoredAnalysis, retrieved: QueryResponse) -> dic
     }
 
 
+UNAVAILABLE_NOTE = {
+    "not_configured": (
+        "No Gemini key is configured, so this is the retrieved Git explanation rather than an "
+        "AI answer."
+    ),
+    "invalid_key": (
+        "Gemini rejected the configured key, so this is the retrieved Git explanation rather "
+        "than an AI answer."
+    ),
+    "rate_limited": (
+        "Gemini is rate limited right now, so this is the retrieved Git explanation rather than "
+        "an AI answer. Retry in a moment for the AI rewrite."
+    ),
+    "provider_error": (
+        "Gemini did not return a usable answer, so this is the retrieved Git explanation rather "
+        "than an AI answer."
+    ),
+}
+
+
 def investigate(
     analysis: StoredAnalysis,
     question: str,
@@ -227,26 +284,30 @@ def investigate(
         "related_files": retrieved.related_files,
         "ai_available": key_present,
     }
-    if not key_present:
+    # The deterministic retrieval is always the floor. Whatever happens to the
+    # provider, the finding panel must never render an empty answer, and the
+    # fallback must never be labelled as an AI answer.
+    grounded = (retrieved.answer or retrieved.retrieval_summary or "").strip()
+
+    def unavailable(reason: str) -> QueryResponse:
         return QueryResponse(
             mode="ai-unavailable",
-            answer="",
+            answer=grounded,
             ai_used=False,
-            unavailable_reason="not_configured",
+            unavailable_reason=reason,
+            why=UNAVAILABLE_NOTE.get(reason, UNAVAILABLE_NOTE["provider_error"]),
+            follow_ups=retrieved.follow_ups,
             **base,
         )
+
+    if not key_present:
+        return unavailable("not_configured")
 
     payload = _evidence_payload(analysis, retrieved)
     user = f"Question:\n{question}\n\nEvidence:\n{json.dumps(payload, ensure_ascii=True)}"
     result, reason = _call_gemini(INVESTIGATE_RULES, user)
     if result is None:
-        return QueryResponse(
-            mode="ai-unavailable",
-            answer="",
-            ai_used=False,
-            unavailable_reason=reason or "provider_error",
-            **base,
-        )
+        return unavailable(reason or "provider_error")
     if isinstance(result, str):
         return QueryResponse(
             mode="grounded-ai",
@@ -258,23 +319,7 @@ def investigate(
         )
     answer = str(result.get("answer") or "").strip()
     if not answer:
-        fallback = (retrieved.answer or retrieved.retrieval_summary or "").strip()
-        if fallback:
-            return QueryResponse(
-                mode="repository-search",
-                answer=fallback,
-                ai_used=False,
-                confidence="medium",
-                why="The model did not return a rewrite, so the retrieved Git explanation is shown.",
-                **base,
-            )
-        return QueryResponse(
-            mode="ai-unavailable",
-            answer="",
-            ai_used=False,
-            unavailable_reason="provider_error",
-            **base,
-        )
+        return unavailable("provider_error")
     confidence = str(result.get("confidence") or "medium").lower()
     if confidence not in {"high", "medium", "low"}:
         confidence = "medium"

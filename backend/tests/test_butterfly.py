@@ -205,7 +205,7 @@ def test_deleted_file_still_counts_as_shared_history() -> None:
 
 
 def test_binary_file_counts_as_shared_history() -> None:
-    binary = FileChange(path="assets/logo.png", additions=0, deletions=0, binary=True)
+    binary = FileChange(path="assets/logo.png", additions=0, deletions=0, change_type="binary")
     commits = [
         _commit("b", "2026-08-20T10:00:00+00:00", "Swap logo", [binary], 0),
         _commit("a", "2026-08-10T10:00:00+00:00", "Add logo", [binary], 0),

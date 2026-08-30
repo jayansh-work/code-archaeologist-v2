@@ -1,6 +1,6 @@
 # Code Archaeologist
 
-Software-forensics tool for exploring how a public GitHub repository evolved — using real commits, files, authors, timestamps, and diffs.
+Software-forensics tool for exploring how a public GitHub repository evolved — using real commits, changed files, authors, timestamps, and diff statistics.
 
 ## What it is
 
@@ -30,7 +30,7 @@ The product has three layers:
 
 - Validate public `https://github.com/owner/repository` URLs
 - Shallow-clone and extract real Git history
-- Show commit hashes, messages, authors, timestamps, files, additions, and deletions
+- Show commit hashes, messages, authors, timestamps, changed file paths, additions, and deletions
 - Interactive repository-evolution flowchart (real commits only, arrows wrap to stay on the page)
 - Butterfly effect: later commits that reused the same files as a selected change
 - Archaeologist notes from the analyzed window, with optional AI additions
@@ -39,6 +39,42 @@ The product has three layers:
 - Ask Code Archaeologist in natural language after analysis
 - Evidence-grounded Gemini answers when `GEMINI_API_KEY` is set
 - Git analysis, graph, and history remain usable if Gemini is unavailable
+
+The UI shows **file-level change statistics** (paths, additions, deletions, change type). It does
+not render full unified patch hunks.
+
+## Ask scope
+
+Two deliberately separate things:
+
+| Control | Scope | Conversation history |
+| --- | --- | --- |
+| **Ask Code Archaeologist** (main bar) | Whole analyzed repository | Recorded, so follow-ups work |
+| **Ask AI about this commit** | That commit only | Not recorded |
+| **Explain this file** | That file only | Not recorded |
+| **Ask AI about this butterfly** | That commit's butterfly trace | Not recorded |
+
+Selecting a commit in the flowchart or typing in the history file filter changes **only what you
+see**. Neither becomes AI context, so a general question is never silently biased by whatever
+happens to be highlighted.
+
+Inline answers appear directly under the control that asked, so a local question never scrolls you
+somewhere else. Asking about the same commit or file from two places (the details panel and the
+history row) shares one result rather than firing two requests.
+
+## Butterfly effect semantics
+
+Butterfly is a deterministic Git calculation, not a prediction:
+
+1. Take the selected commit.
+2. Take the file paths it changed.
+3. Find analyzed commits **after** it that changed at least one of the same paths.
+4. Find analyzed commits **before** it that had already changed those paths.
+
+Chronology comes from the order `git log` returns, never from comparing timestamp strings, because
+commit timestamps can carry different timezone offsets, be rewritten, or tie.
+
+This shows shared file history. It does **not** prove one change caused another.
 
 ## Architecture
 
@@ -100,10 +136,50 @@ npm run dev
 
 Open: `http://127.0.0.1:3000`
 
-Optional Windows helper (opens two terminals):
+Optional Windows helper (opens two terminals, refuses to start if a port is busy):
 
 ```powershell
-.\scripts\dev.ps1
+powershell -ExecutionPolicy Bypass -File scripts\dev.ps1
+```
+
+## Demo mode (recommended for anything being presented)
+
+`next dev` recompiles on every keystroke and shows a development error overlay. Neither belongs in
+front of an audience, and rebuilding `.next` while a dev server holds it is what produces errors
+like `Cannot find module './833.js'`. Use production mode instead.
+
+```powershell
+# 1. Check the machine. Never prints your API key.
+powershell -ExecutionPolicy Bypass -File scripts\doctor.ps1
+
+# 2. Tests, lint, typecheck, production build. Stops at the first failure.
+powershell -ExecutionPolicy Bypass -File scripts\prepare-demo.ps1
+
+# 3. Start: backend without --reload, frontend from the production build.
+powershell -ExecutionPolicy Bypass -File scripts\demo.ps1
+
+# 4. Stop only the processes step 3 started.
+powershell -ExecutionPolicy Bypass -File scripts\stop-demo.ps1
+```
+
+| Script | What it does |
+| --- | --- |
+| `scripts\doctor.ps1` | PASS/WARN/FAIL table: Git, Python, uv, Node, npm, ports 8000/3000, `backend\.env`, whether a Gemini key is configured (never its value), dependencies, build freshness, and live `/health` |
+| `scripts\prepare-demo.ps1` | `uv run pytest -q`, `npm run lint`, `npm run typecheck`, `npm run build`. Prints `DEMO BUILD READY` only if all four pass |
+| `scripts\demo.ps1` | Verifies ports 8000 and 3000 are free, starts `uvicorn` without `--reload` and `next start`, waits for both to answer, records its own PIDs in `tmp\demo\pids.json` |
+| `scripts\stop-demo.ps1` | Stops only the recorded PIDs, re-checking each one's start time so a recycled PID is never killed |
+
+No script ever terminates a process it did not start. If a port is occupied, you get the PID and
+process name and are asked to close it yourself.
+
+### If the frontend build gets into a bad state
+
+`.next` must not be deleted while a Next process is using it:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\stop-demo.ps1   # confirm port 3000 is free
+Remove-Item -Recurse -Force frontend\.next
+powershell -ExecutionPolicy Bypass -File scripts\prepare-demo.ps1
 ```
 
 ## Environment variables
@@ -150,52 +226,75 @@ The app works without a Gemini key.
 
 1. After a successful analysis, **Ask Code Archaeologist** appears.
 2. `POST /query` uses the current `analysis_id`.
-3. The query engine retrieves relevant commits and files first.
-4. If `GEMINI_API_KEY` is set, Gemini explains only that evidence. Follow-up questions keep a short session history.
+3. The query engine retrieves relevant commits and files first. If nothing matches the wording, it
+   returns a bounded, diverse sample (recent plus highest-churn commits) rather than sending Gemini
+   no context at all.
+4. If `GEMINI_API_KEY` is set, Gemini explains only that evidence. Follow-up questions keep a short
+   session history; inline explanations deliberately do not.
 5. Findings cite real hashes. Clicking a citation selects the commit in the graph and history.
-
-If Gemini is missing or fails, the UI shows that AI investigation is temporarily unavailable. Retrieved Git evidence stays visible.
 
 Queries do not clone the repository.
 
+### When AI is unavailable
+
+The response always carries the deterministic Git explanation, so the finding panel is never blank.
+It is labelled `retrieved from Git history, not AI` and reports why:
+
+| Reason | Meaning |
+| --- | --- |
+| `not_configured` | No key in `backend/.env` |
+| `invalid_key` | Gemini rejected the key |
+| `rate_limited` | Free-tier quota reached. Wait and use **Retry with AI** |
+| `provider_error` | The model returned nothing usable |
+
+The free Gemini tier is capped at roughly 20 requests per rolling window per model, which is easy
+to hit while rehearsing. The app honours the retry delay the API returns once, then falls back
+calmly rather than hanging. Every async request is also bound to its analysis, so a late answer
+from a previous repository can never appear under a new one.
+
+Requests never block each other's UI: the flowchart, commit history, and notes stay usable while a
+query is running.
+
 ## Security decisions
 
-- No `shell=True` with user input
-- HTTPS GitHub URLs only
-- Timeouts on Git operations
-- Temporary clones cleaned up after use
+- Git runs through `subprocess` argument arrays with `shell=False`; no `shell=True` anywhere
+- The repository URL is never interpolated into a shell command string
+- HTTPS `github.com` URLs only; no other hosts, protocols, or local paths
+- URLs containing credentials are rejected
+- `GIT_TERMINAL_PROMPT=0` and an empty credential helper, so a private repository fails fast
+  instead of hanging on a password prompt
+- Timeouts on every Git operation, and a wall-clock budget on the Gemini call chain
+- Temporary clones removed in a `finally` block
 - CORS limited to local frontend origins
-- API keys via environment only
-- User-facing errors omit local filesystem paths
+- API keys read from the environment only; `.env` is git-ignored and never persisted into sessions
+- User-facing errors omit local filesystem paths and never include stack traces
 
 ## Current limitations
 
 - Public GitHub repositories only
-- Latest 30 commits (shallow history)
+- Latest 30 commits (shallow history), so all statistics describe that window, not the repository
 - Sessions expire after 45 minutes (kept across API reloads on disk)
 - No private-repo auth
-- No full-file diffs in the UI (file paths and numstat only)
+- File-level change statistics only. Full unified patch hunks are not rendered
+- Rename tracking preserves the destination path; the previous path is parsed but not displayed
+- Butterfly relationships are same-file only, one level deep, capped at 8 per direction
 - Gemini answers are evidence-bounded; they cannot prove developer intent
+- The free Gemini tier is rate limited, so AI rewrites can fall back during heavy rehearsal
 
 ## Roadmap
+
+Not implemented yet:
 
 - Optional deeper history with explicit user consent
 - Collapsible diff excerpts for selected files
 - Additional Git hosts after the same validation model
 
-## Demo instructions
+## Demo guide
 
-1. Start backend, then frontend, with the commands above.
-2. Open `http://127.0.0.1:3000`. The landing line is **Software has a history. Make it searchable.**
-3. Paste `https://github.com/octocat/Hello-World` (or another small public repo).
-4. Click **Analyze repository**.
-5. Inspect repository stats, then **Repository evolution**. Click a commit node and read its butterfly effect.
-6. Read **Archaeologist notes**.
-7. Ask **What are the most important changes in this repository?**
-8. Click an evidence hash to select that commit in the graph and history.
-9. Ask **Explain this commit to someone new to the codebase.**
+See [docs/demo.md](docs/demo.md) for tested 30-second, 90-second, and 3-minute runs, including the
+exact repository, the best butterfly commit, and questions that were actually verified.
 
-For steps 7–9 to return an AI finding, set `GEMINI_API_KEY` in `backend/.env`. Without a key, Git evidence still appears and the graph remains usable.
+Reviewer questions and answers: [docs/reviewer-qa.md](docs/reviewer-qa.md).
 
 ## Tests
 

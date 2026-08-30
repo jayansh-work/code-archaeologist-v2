@@ -1,6 +1,7 @@
 "use client";
 
 import CitedText from "@/components/CitedText";
+import { isFallbackAnswer, unavailableTitle } from "@/lib/aiStatus";
 import { displayAnswer, type InlineAskState } from "@/lib/inlineAsk";
 
 type InlineFindingProps = {
@@ -39,19 +40,14 @@ export default function InlineFinding({ ask, onSelectHash, onRetry }: InlineFind
   }
 
   const text = displayAnswer(ask.result);
-  const reason = ask.result.unavailable_reason;
-  const showKeyHint =
-    ask.result.mode === "ai-unavailable" &&
-    !ask.result.ai_used &&
-    (reason === "not_configured" || reason === "invalid_key");
+  const fallback = isFallbackAnswer(ask.result);
 
   return (
     <div className="inline-finding" aria-live="polite">
-      {showKeyHint ? (
+      {fallback ? (
         <p className="form-hint">
-          {reason === "invalid_key"
-            ? "Gemini rejected the API key. The Git history explanation is shown instead."
-            : "Add GEMINI_API_KEY in backend/.env to let AI rewrite this. The Git history explanation is shown below."}
+          {unavailableTitle(ask.result.unavailable_reason)} Showing the retrieved Git history
+          explanation instead.
         </p>
       ) : null}
       {text ? (
@@ -59,7 +55,12 @@ export default function InlineFinding({ ask, onSelectHash, onRetry }: InlineFind
       ) : (
         <p className="empty">No written answer came back. Retry this question.</p>
       )}
-      {ask.result.confidence ? (
+      {fallback ? (
+        <button className="ghost-btn" type="button" onClick={onRetry}>
+          Retry with AI
+        </button>
+      ) : null}
+      {!fallback && ask.result.confidence ? (
         <p className="form-hint">
           Confidence: {ask.result.confidence}
           {ask.result.why ? ` · ${ask.result.why}` : ""}

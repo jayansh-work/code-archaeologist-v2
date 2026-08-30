@@ -16,8 +16,6 @@ import RepositoryQuery from "@/components/RepositoryQuery";
 import RepositorySummary from "@/components/RepositorySummary";
 import TeamCredits from "@/components/TeamCredits";
 import { analyzeRepository, fetchAiNotes, isCancelled, queryRepository } from "@/lib/api";
-import type { AskContext } from "@/lib/askContext";
-import { commitContext, contextFile, contextHash, fileContext } from "@/lib/askContext";
 import type { InlineAskState } from "@/lib/inlineAsk";
 import type { ArchaeologistNote, AnalyzeResponse, CommitEvidence, QueryResponse } from "@/lib/types";
 import { validateGithubRepoUrl } from "@/lib/validation";
@@ -39,7 +37,6 @@ export default function InvestigationApp() {
   const [notes, setNotes] = useState<ArchaeologistNote[]>([]);
   const [notesLoading, setNotesLoading] = useState(false);
   const [question, setQuestion] = useState("");
-  const [askContext, setAskContext] = useState<AskContext | null>(null);
   const [queryStatus, setQueryStatus] = useState<QueryStatus>("idle");
   const [queryError, setQueryError] = useState<string | null>(null);
   const [queryResult, setQueryResult] = useState<QueryResponse | null>(null);
@@ -50,10 +47,7 @@ export default function InvestigationApp() {
   const analyzeLock = useRef(false);
   const queryLock = useRef(false);
   const inlineLocks = useRef(new Set<string>());
-  const lastQuery = useRef<{ question: string; context: AskContext | null }>({
-    question: "",
-    context: null,
-  });
+  const lastQuestion = useRef("");
 
   // Request ownership: every async response must prove it still belongs to the
   // analysis that is on screen before it is allowed to write state.
@@ -137,21 +131,19 @@ export default function InvestigationApp() {
       return;
     }
     const hadWorkspace = analysis !== null;
+    const previousId = analysis?.analysis_id ?? null;
     analyzeLock.current = true;
-    // Drop ownership first so anything still in flight for the old analysis
-    // cannot write into the new workspace.
-    ownerRef.current = null;
-    scopeRef.current?.abort();
-    scopeRef.current = null;
+    // Keep the previous investigation on screen until the new analysis
+    // actually succeeds. Ownership stays with the current workspace so a
+    // late response from this repository can still apply while the next
+    // clone is running. Only on success do we abort the old scope and
+    // replace the workspace.
     setStatus("loading");
     setError(null);
     setReanalyzeError(null);
-    setQueryResult(null);
-    setQueryError(null);
-    setQueryStatus("idle");
-    setNotesLoading(false);
     try {
       const result = await analyzeRepository(repoUrl.trim());
+      scopeRef.current?.abort();
       const scope = new AbortController();
       ownerRef.current = result.analysis_id;
       scopeRef.current = scope;
@@ -159,10 +151,12 @@ export default function InvestigationApp() {
       setNotes(result.notes);
       setSelectedHash(null);
       setFileFilter("");
-      setAskContext(null);
       setQuestion("");
       setAsks({});
-      lastQuery.current = { question: "", context: null };
+      setQueryResult(null);
+      setQueryError(null);
+      setQueryStatus("idle");
+      lastQuestion.current = "";
       setStatus("success");
       setShowAnother(false);
       setNotesLoading(true);
@@ -186,14 +180,13 @@ export default function InvestigationApp() {
         caught instanceof Error ? caught.message : "Repository could not be analyzed.";
       if (hadWorkspace) {
         // Non-destructive: keep the previous investigation but say plainly
-        // that the new repository failed.
+        // that the new repository failed. Ownership never left the current
+        // workspace, so in-flight notes/queries for it stay valid.
         setReanalyzeError(message);
         setStatus("success");
         setShowAnother(true);
-        if (analysis) {
-          ownerRef.current = analysis.analysis_id;
-          const scope = new AbortController();
-          scopeRef.current = scope;
+        if (previousId && ownerRef.current !== previousId) {
+          ownerRef.current = previousId;
         }
       } else {
         setAnalysis(null);
@@ -206,10 +199,13 @@ export default function InvestigationApp() {
   }
 
   /**
-   * Main repository-wide investigation. Scope comes only from `context`,
-   * never from the selected commit or the history file filter.
+   * Main investigation: always the whole analyzed repository.
+   *
+   * No commit or file context is passed here. The selected commit and the
+   * history file filter are display state only, so a general question can
+   * never be silently biased by what happens to be highlighted.
    */
-  async function runQuery(raw: string, context: AskContext | null) {
+  async function runQuery(raw: string) {
     if (!analysis || queryLock.current) {
       return;
     }
@@ -222,15 +218,12 @@ export default function InvestigationApp() {
     const analysisId = analysis.analysis_id;
     const signal = scopeRef.current?.signal;
     queryLock.current = true;
-    lastQuery.current = { question: nextQuestion, context };
+    lastQuestion.current = nextQuestion;
     setQuestion(nextQuestion);
-    setAskContext(context);
     setQueryStatus("loading");
     setQueryError(null);
     try {
       const result = await queryRepository(analysisId, nextQuestion, {
-        selectedHash: contextHash(context),
-        selectedFile: contextFile(context),
         recordHistory: true,
         signal,
       });
@@ -407,10 +400,8 @@ export default function InvestigationApp() {
             <RepositoryQuery
               value={question}
               disabled={queryStatus === "loading"}
-              context={askContext}
               onChange={setQuestion}
-              onClearContext={() => setAskContext(null)}
-              onSubmit={(next) => void runQuery(next, askContext)}
+              onSubmit={(next) => void runQuery(next)}
             />
             {queryStatus === "loading" ? (
               <div className="status" role="status">
@@ -424,9 +415,7 @@ export default function InvestigationApp() {
                 <button
                   className="ghost-btn"
                   type="button"
-                  onClick={() =>
-                    void runQuery(lastQuery.current.question, lastQuery.current.context)
-                  }
+                  onClick={() => void runQuery(lastQuestion.current)}
                 >
                   Retry
                 </button>
@@ -438,10 +427,8 @@ export default function InvestigationApp() {
                 loading={queryStatus === "loading"}
                 onSelectHash={(hash) => selectCommit(hash, true)}
                 onSelectFile={setFileFilter}
-                onAsk={(next) => void runQuery(next, askContext)}
-                onRetry={() =>
-                  void runQuery(lastQuery.current.question, lastQuery.current.context)
-                }
+                onAsk={(next) => void runQuery(next)}
+                onRetry={() => void runQuery(lastQuestion.current)}
               />
             ) : null}
 
@@ -496,19 +483,12 @@ export default function InvestigationApp() {
               commits={analysis.commits}
               selectedHash={selectedHash}
               fileFilter={fileFilter}
+              asks={asks}
               onFileFilterChange={setFileFilter}
               onSelectHash={(hash) => selectCommit(hash)}
-              onAsk={(commit) => {
-                selectCommit(commit.hash);
-                void runQuery(
-                  `Explain this commit ${commit.short_hash} to someone new to the codebase.`,
-                  commitContext(commit.short_hash, commit.hash),
-                );
-              }}
-              onAskFile={(path) => {
-                setFileFilter(path);
-                void runQuery(`Summarize the evolution of ${path}.`, fileContext(path));
-              }}
+              onAsk={(slot, inlineQuestion, commit, file) =>
+                void runInlineAsk(slot, inlineQuestion, commit, file)
+              }
             />
           </>
         ) : (

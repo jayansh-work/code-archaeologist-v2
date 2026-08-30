@@ -1,6 +1,7 @@
 "use client";
 
 import CitedText from "@/components/CitedText";
+import { isFallbackAnswer, unavailableBody, unavailableTitle } from "@/lib/aiStatus";
 import { formatCount, formatTimestamp } from "@/lib/format";
 import { displayAnswer } from "@/lib/inlineAsk";
 import type { QueryResponse } from "@/lib/types";
@@ -22,43 +23,32 @@ export default function EvidencePanel({
   onAsk,
   onRetry,
 }: EvidencePanelProps) {
-  const unavailable = result.mode === "ai-unavailable" && !result.ai_used;
-  const unavailableTitle =
-    result.unavailable_reason === "not_configured"
-      ? "AI investigation is not configured."
-      : result.unavailable_reason === "invalid_key"
-        ? "Gemini rejected the API key."
-        : "AI investigation is temporarily unavailable.";
-  const unavailableBody =
-    result.unavailable_reason === "not_configured"
-      ? "Paste GEMINI_API_KEY into backend/.env, then retry. Restart is not required. Repository evidence remains available below."
-      : result.unavailable_reason === "invalid_key"
-        ? "Check GEMINI_API_KEY in backend/.env. Repository evidence remains available below."
-        : "Repository evidence remains available below.";
+  const unavailable = isFallbackAnswer(result);
+  const text = displayAnswer(result);
 
   return (
     <section className="finding" aria-labelledby="finding-heading">
       <h2 id="finding-heading" className="section-title">
         Finding
+        {unavailable ? <span className="ai-note">retrieved from Git history, not AI</span> : null}
       </h2>
       {unavailable ? (
-        <div className="error-box" role="status">
-          <p>{unavailableTitle}</p>
-          <p>{unavailableBody}</p>
+        <div className="notice" role="status">
+          <p>{unavailableTitle(result.unavailable_reason)}</p>
+          <p>{unavailableBody(result.unavailable_reason)}</p>
           <button className="ghost-btn" type="button" onClick={onRetry} disabled={loading}>
-            Retry
+            Retry with AI
           </button>
         </div>
-      ) : (
-        <CitedText text={displayAnswer(result) || result.answer} onSelectHash={onSelectHash} />
-      )}
-
-      {unavailable && result.retrieval_summary ? (
-        <>
-          <h2 className="section-title">Retrieved Git evidence</h2>
-          <CitedText text={result.retrieval_summary} onSelectHash={onSelectHash} />
-        </>
       ) : null}
+      {text ? (
+        <CitedText text={text} onSelectHash={onSelectHash} />
+      ) : (
+        <p className="empty">
+          The analyzed Git history did not produce an explanation for that question. Try a commit
+          message, file path, author, or hash.
+        </p>
+      )}
 
       {!unavailable && result.confidence ? (
         <>

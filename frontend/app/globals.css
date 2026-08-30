@@ -377,6 +377,33 @@ button {
   gap: 14px;
 }
 
+/* Informational, not a failure: the Git evidence below is still valid. */
+.notice {
+  margin: 0 0 14px;
+  padding: 10px 12px;
+  border: 1px solid var(--border-default);
+  border-left: 3px solid var(--warning);
+  background: var(--bg-secondary);
+  border-radius: var(--radius);
+  font-size: 13px;
+}
+
+.notice p {
+  margin: 0;
+}
+
+.notice p + p {
+  margin-top: 6px;
+  color: var(--text-secondary);
+}
+
+.notice .ghost-btn {
+  margin-top: 10px;
+  height: 30px;
+  padding: 0 10px;
+  font-size: 12px;
+}
+
 .focus-list {
   margin-top: 40px;
   padding-top: 20px;
@@ -577,33 +604,9 @@ button {
   margin: 0;
 }
 
-.scope-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 3px 6px 3px 8px;
-  border: 1px solid var(--accent);
-  border-radius: var(--radius);
-  background: var(--bg-secondary);
-  color: var(--text-primary);
-  font-family: var(--mono);
-  font-size: 12px;
-  overflow-wrap: anywhere;
-}
-
-.scope-chip button {
-  background: transparent;
-  border: 0;
-  padding: 0 2px;
-  color: var(--text-muted);
-  font-size: 14px;
-  line-height: 1;
-  cursor: pointer;
-  transition: color var(--ease);
-}
-
-.scope-chip button:hover {
-  color: var(--danger);
+/* Inline findings sit inside a table cell in the history rows. */
+.file-table .inline-finding {
+  margin: 0 0 8px;
 }
 
 .chip {

@@ -1,5 +1,3 @@
-import type { AskContext } from "@/lib/askContext";
-
 const SUGGESTIONS = [
   "Explain recent changes",
   "Find architectural shifts",
@@ -10,20 +8,15 @@ const SUGGESTIONS = [
 type RepositoryQueryProps = {
   value: string;
   disabled: boolean;
-  /** Explicit, user-visible scope. Null means repository-wide. */
-  context: AskContext | null;
   onChange: (value: string) => void;
   onSubmit: (question: string) => void;
-  onClearContext: () => void;
 };
 
 export default function RepositoryQuery({
   value,
   disabled,
-  context,
   onChange,
   onSubmit,
-  onClearContext,
 }: RepositoryQueryProps) {
   return (
     <section className="query-block" aria-labelledby="query-heading">
@@ -60,25 +53,11 @@ export default function RepositoryQuery({
         </div>
       </form>
       <div className="ask-scope">
-        {context ? (
-          <>
-            <span className="scope-chip">
-              Context: {context.label}
-              <button
-                type="button"
-                aria-label={`Remove ${context.label} context and ask across the whole repository`}
-                onClick={onClearContext}
-              >
-                ×
-              </button>
-            </span>
-            <span className="form-hint">This question is scoped to the context above.</span>
-          </>
-        ) : (
-          <span className="form-hint">
-            Scope: whole analyzed repository. Selecting a commit or filtering files does not change it.
-          </span>
-        )}
+        <span className="form-hint">
+          Scope: the whole analyzed repository. Selecting a commit or filtering files changes only
+          what you see, never what the AI is asked. For one commit or file, use the
+          &ldquo;Ask AI&rdquo; buttons beside it.
+        </span>
       </div>
       <p className="form-hint">Suggested investigations</p>
       <div className="suggestions">
