@@ -32,7 +32,7 @@ Rules:
 - Git history shows what changed, not why, unless a commit message states it.
 - If the question is unrelated to this repository, say Code Archaeologist is investigating the selected repository and cannot answer that from Git history.
 - Cite commits inline as [short_hash] using hashes from the evidence.
-- Keep the answer concise and specific.
+- Write 3-6 plain-English sentences. Never leave "answer" empty.
 
 Return JSON only:
 {
@@ -248,6 +248,16 @@ def investigate(
         )
     answer = str(result.get("answer") or "").strip()
     if not answer:
+        fallback = (retrieved.answer or retrieved.retrieval_summary or "").strip()
+        if fallback:
+            return QueryResponse(
+                mode="repository-search",
+                answer=fallback,
+                ai_used=False,
+                confidence="medium",
+                why="The model did not return a rewrite, so the retrieved Git explanation is shown.",
+                **base,
+            )
         return QueryResponse(
             mode="ai-unavailable",
             answer="",

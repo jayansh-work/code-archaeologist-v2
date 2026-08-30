@@ -21,8 +21,9 @@ export default function HowItWorksPage() {
         <p>
           The investigation workspace shows a repository evolution flowchart of the analyzed commits.
           Arrows run left-to-right and wrap downward so the graph stays on the page. Selecting a
-          node reveals commit details and a butterfly effect: earlier and later commits that reused
-          the same files.
+          node reveals commit details and a butterfly effect: if later commits edited the same files,
+          the original change rippled forward. Ask AI under those panels to explain the ripple or a
+          file in plain English.
         </p>
         <h2>3. Investigate</h2>
         <p>

@@ -103,6 +103,7 @@ def test_butterfly_response_mentions_later_reuse() -> None:
     assert "bbbbbbb" in result.answer
     assert "ccccccc" in result.answer
     assert "src/auth.py" in result.related_files
+    assert "ripple" in result.answer.lower() or "same file" in result.answer.lower()
     assert result.evidence[0].note == "Origin of this butterfly trace"
 
 

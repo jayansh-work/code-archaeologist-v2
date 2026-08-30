@@ -56,8 +56,9 @@ def build_deterministic_notes(commits: list[CommitEvidence], commits_window: int
                     kind="butterfly",
                     title="Butterfly effect",
                     body=(
-                        f"Changes to {hotspot} did not stay isolated: it reappears in "
-                        f"{later} later analyzed commit{'s' if later != 1 else ''} after its first change in this window."
+                        f"{hotspot} did not stay a one-time edit. After it first showed up, "
+                        f"it was changed again in {later} later analyzed commit"
+                        f"{'s' if later != 1 else ''} in this window."
                     ),
                     file_path=hotspot,
                 )

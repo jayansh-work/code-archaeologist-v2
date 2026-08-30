@@ -2,6 +2,7 @@
 
 import CitedText from "@/components/CitedText";
 import { formatCount, formatTimestamp } from "@/lib/format";
+import { displayAnswer } from "@/lib/inlineAsk";
 import type { QueryResponse } from "@/lib/types";
 
 type EvidencePanelProps = {
@@ -49,7 +50,7 @@ export default function EvidencePanel({
           </button>
         </div>
       ) : (
-        <CitedText text={result.answer} onSelectHash={onSelectHash} />
+        <CitedText text={displayAnswer(result) || result.answer} onSelectHash={onSelectHash} />
       )}
 
       {unavailable && result.retrieval_summary ? (

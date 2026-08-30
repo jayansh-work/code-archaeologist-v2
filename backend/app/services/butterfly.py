@@ -59,8 +59,8 @@ def butterfly_response(
     upstream, downstream = compute_butterfly(commits, origin)
     if not files:
         answer = (
-            f"Commit {origin.short_hash} recorded no file-level changes, so a butterfly effect "
-            "cannot be traced from Git file evidence in this window."
+            f"Commit {origin.short_hash} did not record any changed files, so there is nothing "
+            "to follow forward or backward."
         )
         return QueryResponse(
             mode="repository-search",
@@ -70,25 +70,33 @@ def butterfly_response(
         )
 
     lines = [
-        f"Butterfly effect for {origin.short_hash} ({origin.message}).",
-        f"This commit touched {len(files)} file{'s' if len(files) != 1 else ''}: {', '.join(files[:8])}.",
+        "A small change can spread: later work often edits the same files, like a ripple.",
+        (
+            f"Commit {origin.short_hash} (\"{origin.message}\") changed "
+            f"{len(files)} file{'s' if len(files) != 1 else ''}: {', '.join(files[:8])}."
+        ),
     ]
     if upstream:
+        earlier = ", ".join(commit.short_hash for commit, _shared in upstream[:4])
         lines.append(
-            f"{len(upstream)} earlier analyzed commit{'s' if len(upstream) != 1 else ''} "
-            "already touched some of the same files."
+            f"Before that, {len(upstream)} earlier analyzed commit"
+            f"{'s' if len(upstream) != 1 else ''} already touched some of the same files: {earlier}."
         )
+    else:
+        lines.append("No earlier analyzed commit in this window had already touched those files.")
     if downstream:
         later = ", ".join(
             f"{commit.short_hash} ({', '.join(shared[:3])})" for commit, shared in downstream[:4]
         )
         lines.append(
-            f"{len(downstream)} later analyzed commit{'s' if len(downstream) != 1 else ''} "
-            f"reused those files: {later}."
+            f"After that, {len(downstream)} later analyzed commit"
+            f"{'s' if len(downstream) != 1 else ''} also changed those files: {later}."
         )
     else:
-        lines.append("No later analyzed commit reused those files in this window.")
-    lines.append("This traces shared file history, not runtime impact or developer intent.")
+        lines.append("No later analyzed commit in this window reused those files.")
+    lines.append(
+        "This is shared file history from Git. It does not prove what broke, or why someone made a change."
+    )
 
     evidence = [_to_evidence(origin, note="Origin of this butterfly trace")]
     for commit, shared in upstream[:3]:

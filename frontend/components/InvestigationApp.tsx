@@ -16,6 +16,7 @@ import RepositoryQuery from "@/components/RepositoryQuery";
 import RepositorySummary from "@/components/RepositorySummary";
 import TeamCredits from "@/components/TeamCredits";
 import { analyzeRepository, fetchAiNotes, queryRepository } from "@/lib/api";
+import type { InlineAskState } from "@/lib/inlineAsk";
 import type { ArchaeologistNote, AnalyzeResponse, CommitEvidence, QueryResponse } from "@/lib/types";
 import { validateGithubRepoUrl } from "@/lib/validation";
 
@@ -38,8 +39,10 @@ export default function InvestigationApp() {
   const [selectedHash, setSelectedHash] = useState<string | null>(null);
   const [fileFilter, setFileFilter] = useState("");
   const [showAnother, setShowAnother] = useState(false);
+  const [asks, setAsks] = useState<Record<string, InlineAskState>>({});
   const analyzeLock = useRef(false);
   const queryLock = useRef(false);
+  const inlineLocks = useRef(new Set<string>());
   const lastQuestion = useRef("");
 
   const repoLabel = analysis ? `${analysis.repository.owner}/${analysis.repository.name}` : undefined;
@@ -113,6 +116,7 @@ export default function InvestigationApp() {
     setSelectedHash(null);
     setFileFilter("");
     setNotes([]);
+    setAsks({});
     try {
       const result = await analyzeRepository(repoUrl.trim());
       setAnalysis(result);
@@ -179,6 +183,53 @@ export default function InvestigationApp() {
       );
     } finally {
       queryLock.current = false;
+    }
+  }
+
+  async function runInlineAsk(
+    slot: string,
+    question: string,
+    contextCommit?: CommitEvidence | null,
+    contextFile?: string,
+  ) {
+    if (!analysis || inlineLocks.current.has(slot)) {
+      return;
+    }
+    const nextQuestion = question.trim();
+    if (!nextQuestion) {
+      return;
+    }
+    inlineLocks.current.add(slot);
+    setAsks((current) => ({
+      ...current,
+      [slot]: { status: "loading", result: null, error: null, question: nextQuestion },
+    }));
+    try {
+      const result = await queryRepository(
+        analysis.analysis_id,
+        nextQuestion,
+        contextCommit?.hash ?? selectedHash,
+        contextFile,
+      );
+      setAsks((current) => ({
+        ...current,
+        [slot]: { status: "success", result, error: null, question: nextQuestion },
+      }));
+    } catch (caught) {
+      setAsks((current) => ({
+        ...current,
+        [slot]: {
+          status: "error",
+          result: null,
+          error:
+            caught instanceof Error
+              ? caught.message
+              : "The investigation could not be completed. Analyze the repository again if the session expired.",
+          question: nextQuestion,
+        },
+      }));
+    } finally {
+      inlineLocks.current.delete(slot);
     }
   }
 
@@ -284,8 +335,8 @@ export default function InvestigationApp() {
                 Repository evolution
               </h2>
               <p className="form-hint">
-                Older work starts at the top-left. Arrows point toward newer commits. Select a node to
-                inspect details and its butterfly effect.
+                Older work starts at the top-left. Arrows point toward newer commits. Select a commit
+                to see if later work reused the same files.
               </p>
               <div className="evolution-layout">
                 <EvolutionGraph
@@ -296,27 +347,23 @@ export default function InvestigationApp() {
                 <div className="evolution-below">
                   <CommitDetailsPanel
                     commit={selectedCommit}
-                    onAsk={(commit) => {
-                      selectCommit(commit.hash);
-                      void runQuery(
-                        `Explain what changed in commit ${commit.short_hash} and why the history suggests those changes were made.`,
-                        commit,
-                      );
-                    }}
-                    onAskFile={askAboutFile}
+                    asks={asks}
+                    onSelectHash={(hash) => selectCommit(hash)}
                     onSelectFile={setFileFilter}
+                    onAsk={(slot, question, commit, file) => {
+                      selectCommit(commit.hash);
+                      void runInlineAsk(slot, question, commit, file);
+                    }}
                   />
                   <ButterflyPanel
                     commit={selectedCommit}
                     commits={analysis.commits}
+                    asks={asks}
                     onSelectHash={(hash) => selectCommit(hash)}
                     onSelectFile={setFileFilter}
-                    onAsk={(commit) => {
+                    onAsk={(slot, question, commit, file) => {
                       selectCommit(commit.hash);
-                      void runQuery(
-                        `What is the butterfly effect of commit ${commit.short_hash}? What later work reused the same files?`,
-                        commit,
-                      );
+                      void runInlineAsk(slot, question, commit, file);
                     }}
                   />
                 </div>

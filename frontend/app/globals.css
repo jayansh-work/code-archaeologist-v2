@@ -305,6 +305,12 @@ button {
   text-decoration: none;
 }
 
+.ghost-btn:disabled,
+.link-btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
 .link-btn {
   background: none;
   border: 0;
@@ -786,6 +792,45 @@ button {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.butterfly-plain {
+  margin: 0 0 10px;
+  color: var(--text-secondary);
+}
+
+.wing-list {
+  display: grid;
+  gap: 8px;
+}
+
+.wing-row {
+  min-width: 0;
+}
+
+.wing-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.inline-finding {
+  margin-top: 8px;
+  padding: 10px;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius);
+  background: var(--bg-primary);
+}
+
+.inline-finding .finding-body {
+  margin: 0;
+  font-size: 13px;
+  max-width: none;
+}
+
+.inline-finding .ghost-btn {
+  margin-top: 8px;
 }
 
 .notes {
