@@ -8,6 +8,7 @@ from collections.abc import Iterable
 
 from app.models import CommitEvidence, EvidenceItem, FileChange, QueryResponse
 from app.services.analysis_store import StoredAnalysis
+from app.services.butterfly import butterfly_response
 
 STOPWORDS = {
     "a",
@@ -130,6 +131,19 @@ def _score_commit(commit: CommitEvidence, terms: Iterable[str]) -> int:
 
 def _intent(question: str) -> str:
     q = question.lower()
+    if any(
+        phrase in q
+        for phrase in (
+            "butterfly",
+            "blast radius",
+            "ripple",
+            "what did this affect",
+            "what did that affect",
+            "cascade",
+            "later commits that",
+        )
+    ):
+        return "butterfly"
     if HASH_RE.search(q) and any(word in q for word in ("before", "prior", "earlier than")):
         return "before_commit"
     if HASH_RE.search(q) and any(
@@ -636,6 +650,26 @@ def _keyword_search(analysis: StoredAnalysis, question: str) -> QueryResponse:
     )
 
 
+def _butterfly(analysis: StoredAnalysis, question: str, focus_hashes: list[str] | None) -> QueryResponse:
+    origin = None
+    if focus_hashes:
+        origin = _find_commit(analysis, focus_hashes[0])
+    if origin is None:
+        match = HASH_RE.search(question)
+        if match:
+            origin = _find_commit(analysis, match.group(0))
+    if origin is None:
+        origin = max(analysis.commits, key=_commit_churn, default=None)
+    if origin is None:
+        return QueryResponse(
+            mode="repository-search",
+            intent="butterfly",
+            answer="No analyzed commit is available to trace a butterfly effect.",
+            evidence=[],
+        )
+    return butterfly_response(analysis.commits, origin)
+
+
 _HANDLERS = {
     "most_changed_files": lambda analysis, _question: _most_changed_files(analysis),
     "largest_commits": lambda analysis, _question: _largest_commits(analysis),
@@ -701,6 +735,9 @@ def answer_question(
     focus_file: str | None = None,
 ) -> QueryResponse:
     intent = _intent(question)
-    handler = _HANDLERS.get(intent, _keyword_search)
-    result = handler(analysis, question)
+    if intent == "butterfly":
+        result = _butterfly(analysis, question, focus_hashes)
+    else:
+        handler = _HANDLERS.get(intent, _keyword_search)
+        result = handler(analysis, question)
     return _merge_focus(analysis, result, focus_hashes, focus_file)

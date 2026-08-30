@@ -112,6 +112,7 @@ export default function EvidencePanel({
                 {item.files.length > 0 ? (
                   <p className="file-path">{item.files.slice(0, 4).join("  ·  ")}</p>
                 ) : null}
+                {item.note ? <p className="form-hint">{item.note}</p> : null}
               </button>
             </li>
           ))}

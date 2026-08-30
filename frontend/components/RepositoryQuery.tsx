@@ -2,7 +2,7 @@ const SUGGESTIONS = [
   "Explain recent changes",
   "Find architectural shifts",
   "What files are hotspots?",
-  "Why did this area change?",
+  "What did this affect?",
 ];
 
 type RepositoryQueryProps = {

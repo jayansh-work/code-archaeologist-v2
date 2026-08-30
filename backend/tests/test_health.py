@@ -25,6 +25,7 @@ def test_info_lists_implemented_capabilities() -> None:
         "evidence-retrieval",
         "repository-query",
         "evolution-graph",
+        "butterfly-effect",
         "archaeologist-notes",
     ):
         assert capability in body["capabilities"]

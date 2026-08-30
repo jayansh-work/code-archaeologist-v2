@@ -31,7 +31,8 @@ The product has three layers:
 - Validate public `https://github.com/owner/repository` URLs
 - Shallow-clone and extract real Git history
 - Show commit hashes, messages, authors, timestamps, files, additions, and deletions
-- Interactive repository-evolution graph (real commits only)
+- Interactive repository-evolution flowchart (real commits only, arrows wrap to stay on the page)
+- Butterfly effect: later commits that reused the same files as a selected change
 - Archaeologist notes from the analyzed window, with optional AI additions
 - Expand a commit to inspect changed files
 - Filter/search the commit list locally
@@ -143,7 +144,7 @@ The app works without a Gemini key.
 2. Backend validates again (this is the security boundary).
 3. A temporary directory is created, the public repo is shallow-cloned, Git history is parsed, then the clone is deleted.
 4. Structured evidence is stored under `analysis_id` (memory plus local JSON so API reloads keep the session).
-5. The investigation workspace shows repository stats, the Ask bar, the evolution graph, notes, and commit history.
+5. The investigation workspace shows repository stats, the Ask bar, the evolution flowchart, butterfly effect, notes, and commit history.
 
 ## Repository query flow
 
@@ -188,7 +189,7 @@ Queries do not clone the repository.
 2. Open `http://127.0.0.1:3000`. The landing line is **Software has a history. Make it searchable.**
 3. Paste `https://github.com/octocat/Hello-World` (or another small public repo).
 4. Click **Analyze repository**.
-5. Inspect repository stats, then **Repository evolution**. Click a commit node.
+5. Inspect repository stats, then **Repository evolution**. Click a commit node and read its butterfly effect.
 6. Read **Archaeologist notes**.
 7. Ask **What are the most important changes in this repository?**
 8. Click an evidence hash to select that commit in the graph and history.

@@ -49,6 +49,19 @@ def build_deterministic_notes(commits: list[CommitEvidence], commits_window: int
                 file_path=hotspot,
             )
         )
+        if appearances >= 2:
+            later = appearances - 1
+            notes.append(
+                ArchaeologistNote(
+                    kind="butterfly",
+                    title="Butterfly effect",
+                    body=(
+                        f"Changes to {hotspot} did not stay isolated: it reappears in "
+                        f"{later} later analyzed commit{'s' if later != 1 else ''} after its first change in this window."
+                    ),
+                    file_path=hotspot,
+                )
+            )
 
     largest = max(commits, key=lambda commit: commit.additions + commit.deletions)
     notes.append(

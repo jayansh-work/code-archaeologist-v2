@@ -4,6 +4,7 @@ import dynamic from "next/dynamic";
 import { useMemo, useRef, useState } from "react";
 
 import ArchaeologistNotes from "@/components/ArchaeologistNotes";
+import ButterflyPanel from "@/components/ButterflyPanel";
 import CommitDetailsPanel from "@/components/CommitDetailsPanel";
 import CommitHistory from "@/components/CommitHistory";
 import EvidencePanel from "@/components/EvidencePanel";
@@ -282,25 +283,43 @@ export default function InvestigationApp() {
               <h2 id="evolution-heading" className="section-title">
                 Repository evolution
               </h2>
-              <p className="form-hint">Older commits are at the top. Newer commits are at the bottom.</p>
+              <p className="form-hint">
+                Older work starts at the top-left. Arrows point toward newer commits. Select a node to
+                inspect details and its butterfly effect.
+              </p>
               <div className="evolution-layout">
                 <EvolutionGraph
                   commits={analysis.commits}
                   selectedHash={selectedHash}
                   onSelectHash={(hash) => selectCommit(hash)}
                 />
-                <CommitDetailsPanel
-                  commit={selectedCommit}
-                  onAsk={(commit) => {
-                    selectCommit(commit.hash);
-                    void runQuery(
-                      `Explain what changed in commit ${commit.short_hash} and why the history suggests those changes were made.`,
-                      commit,
-                    );
-                  }}
-                  onAskFile={askAboutFile}
-                  onSelectFile={setFileFilter}
-                />
+                <div className="evolution-below">
+                  <CommitDetailsPanel
+                    commit={selectedCommit}
+                    onAsk={(commit) => {
+                      selectCommit(commit.hash);
+                      void runQuery(
+                        `Explain what changed in commit ${commit.short_hash} and why the history suggests those changes were made.`,
+                        commit,
+                      );
+                    }}
+                    onAskFile={askAboutFile}
+                    onSelectFile={setFileFilter}
+                  />
+                  <ButterflyPanel
+                    commit={selectedCommit}
+                    commits={analysis.commits}
+                    onSelectHash={(hash) => selectCommit(hash)}
+                    onSelectFile={setFileFilter}
+                    onAsk={(commit) => {
+                      selectCommit(commit.hash);
+                      void runQuery(
+                        `What is the butterfly effect of commit ${commit.short_hash}? What later work reused the same files?`,
+                        commit,
+                      );
+                    }}
+                  />
+                </div>
               </div>
             </section>
 

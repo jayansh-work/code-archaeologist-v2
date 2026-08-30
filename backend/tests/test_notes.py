@@ -22,15 +22,19 @@ def test_deterministic_notes_cover_window_and_hotspot() -> None:
             author_email=None,
             timestamp="2026-08-28T10:00:00+00:00",
             message="Docs",
-            additions=1,
+            additions=2,
             deletions=0,
-            files=[FileChange(path="README.md", additions=1, deletions=0, change_type="modified")],
+            files=[
+                FileChange(path="README.md", additions=1, deletions=0, change_type="modified"),
+                FileChange(path="src/auth.py", additions=1, deletions=0, change_type="modified"),
+            ],
         ),
     ]
     notes = build_deterministic_notes(commits, 30)
     kinds = {note.kind for note in notes}
     assert "activity" in kinds
     assert "hotspot" in kinds
+    assert "butterfly" in kinds
     assert "largest" in kinds
     assert "caveat" in kinds
     assert any("src/auth.py" in note.body for note in notes)

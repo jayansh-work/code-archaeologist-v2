@@ -109,3 +109,8 @@ def test_how_repository_works_uses_overview() -> None:
     result = answer_question(_analysis(), "how does this repository work?")
     assert result.intent == "overview"
     assert result.evidence
+
+
+def test_butterfly_question_uses_butterfly_intent() -> None:
+    result = answer_question(_analysis(), "What is the butterfly effect of this change?")
+    assert result.intent == "butterfly"

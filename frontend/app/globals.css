@@ -165,6 +165,7 @@ button {
   width: min(var(--page), calc(100% - 48px));
   margin: 0 auto;
   padding: 32px 0 64px;
+  overflow-x: hidden;
 }
 
 .kicker {
@@ -656,14 +657,23 @@ button {
 }
 
 .evolution-layout {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-width: 0;
+}
+
+.evolution-below {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 280px;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   gap: 16px;
   align-items: start;
 }
 
 .graph-shell {
-  height: 520px;
+  width: 100%;
+  max-width: 100%;
+  height: min(48vh, 480px);
   border: 1px solid var(--border-default);
   border-radius: var(--radius);
   background: var(--bg-secondary);
@@ -671,8 +681,8 @@ button {
 }
 
 .commit-node {
-  width: 280px;
-  padding: 8px 10px 8px 12px;
+  width: 188px;
+  padding: 6px 10px;
   background: var(--bg-elevated);
   border: 1px solid var(--border-default);
   border-radius: var(--radius);
@@ -697,6 +707,21 @@ button {
 .commit-node.is-selected {
   border-color: var(--accent);
   box-shadow: 0 0 0 1px var(--accent);
+}
+
+.commit-node.is-ripple:not(.is-selected) {
+  border-color: #388bfd66;
+}
+
+.commit-node.is-dimmed {
+  opacity: 0.38;
+}
+
+.commit-node .react-flow__handle {
+  width: 7px;
+  height: 7px;
+  background: var(--border-default);
+  border: none;
 }
 
 .large-mark {
@@ -731,6 +756,36 @@ button {
   margin: 0 0 8px;
   font-size: 13px;
   font-weight: 600;
+}
+
+.butterfly-panel h4 {
+  margin: 12px 0 6px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.butterfly-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.butterfly-list button {
+  display: grid;
+  gap: 2px;
+  width: 100%;
+  text-align: left;
+  background: transparent;
+  border: 0;
+  padding: 6px 0;
+  border-bottom: 1px solid var(--border-default);
+}
+
+.butterfly-msg {
+  color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .notes {
@@ -932,6 +987,22 @@ button {
   background: var(--bg-secondary);
 }
 
+.graph-shell .react-flow {
+  width: 100%;
+  height: 100%;
+}
+
+.react-flow__node {
+  cursor: pointer;
+}
+
+.react-flow__node.selected,
+.react-flow__node:focus,
+.react-flow__node:focus-visible {
+  outline: none;
+  box-shadow: none;
+}
+
 .react-flow__controls {
   box-shadow: none;
   border: 1px solid var(--border-default);
@@ -959,12 +1030,12 @@ button {
 }
 
 @media (max-width: 900px) {
-  .evolution-layout {
+  .evolution-below {
     grid-template-columns: 1fr;
   }
 
   .graph-shell {
-    height: 380px;
+    height: min(42vh, 360px);
   }
 
   .react-flow__minimap {

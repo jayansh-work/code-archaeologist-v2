@@ -23,7 +23,7 @@ Evidence retrieval
     ↓
 Optional grounded Gemini
     ↓
-Evolution graph + notes + investigation view
+Evolution graph + butterfly effect + notes + investigation view
 ```
 
 ## Why Git CLI is used
@@ -57,7 +57,7 @@ Each successful analysis returns an `analysis_id`. The API keeps repository meta
 
 ## Evidence grounding
 
-The query engine matches questions to intents (most-changed files, largest commits, contributors, recent activity, file history, author search, hash lookup, keyword search). Answers include the supporting commits.
+The query engine matches questions to intents (most-changed files, largest commits, contributors, recent activity, file history, author search, hash lookup, butterfly effect, keyword search). Answers include the supporting commits.
 
 If `GEMINI_API_KEY` is set, Gemini may rewrite the answer using only the retrieved evidence JSON. It is not given the whole repository. If the key is missing or the model call fails, the investigation bar reports that AI is temporarily unavailable while retrieved Git evidence remains visible. The evolution graph and commit history stay usable.
 

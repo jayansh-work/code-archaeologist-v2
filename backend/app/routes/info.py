@@ -17,6 +17,7 @@ def info() -> InfoResponse:
         "evidence-retrieval",
         "repository-query",
         "evolution-graph",
+        "butterfly-effect",
         "archaeologist-notes",
     ]
     if gemini_available():

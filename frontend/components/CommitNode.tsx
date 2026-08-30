@@ -9,17 +9,21 @@ export type CommitNodeData = {
   commit: CommitEvidence;
   selected: boolean;
   isLarge: boolean;
+  dimmed: boolean;
+  ripple: boolean;
   onSelect: () => void;
 };
 
 export type CommitFlowNode = Node<CommitNodeData, "commit">;
 
 export default function CommitNode({ data }: NodeProps<CommitFlowNode>) {
-  const { commit, selected, isLarge, onSelect } = data;
+  const { commit, selected, isLarge, dimmed, ripple, onSelect } = data;
   const className = [
     "commit-node",
     selected ? "is-selected" : "",
     isLarge ? "is-large" : "",
+    dimmed ? "is-dimmed" : "",
+    ripple ? "is-ripple" : "",
   ]
     .filter(Boolean)
     .join(" ");
@@ -38,7 +42,8 @@ export default function CommitNode({ data }: NodeProps<CommitFlowNode>) {
         }
       }}
     >
-      <Handle type="target" position={Position.Top} />
+      <Handle id="left" type="target" position={Position.Left} isConnectable={false} />
+      <Handle id="top" type="target" position={Position.Top} isConnectable={false} />
       <div className="ev-meta">
         <span className="hash">{commit.short_hash}</span>
         {isLarge ? (
@@ -58,7 +63,8 @@ export default function CommitNode({ data }: NodeProps<CommitFlowNode>) {
         <span>{commit.author}</span>
         <span>{formatShortDate(commit.timestamp)}</span>
       </div>
-      <Handle type="source" position={Position.Bottom} />
+      <Handle id="right" type="source" position={Position.Right} isConnectable={false} />
+      <Handle id="bottom" type="source" position={Position.Bottom} isConnectable={false} />
     </div>
   );
 }

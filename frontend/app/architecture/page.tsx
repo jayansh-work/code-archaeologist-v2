@@ -22,7 +22,7 @@ Evidence retrieval
     ↓
 Optional grounded Gemini
     ↓
-Evolution graph + notes + investigation view`}</pre>
+Evolution graph + butterfly effect + notes + investigation view`}</pre>
         <h2>Evidence first</h2>
         <p>
           Questions run against stored analysis. The repository is not cloned again. Retrieval

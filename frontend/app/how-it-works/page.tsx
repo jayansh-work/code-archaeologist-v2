@@ -19,8 +19,10 @@ export default function HowItWorksPage() {
         </p>
         <h2>2. Visualize</h2>
         <p>
-          The investigation workspace shows a repository evolution graph of the analyzed commits.
-          Selecting a node reveals author, timestamp, files, and diff statistics.
+          The investigation workspace shows a repository evolution flowchart of the analyzed commits.
+          Arrows run left-to-right and wrap downward so the graph stays on the page. Selecting a
+          node reveals commit details and a butterfly effect: earlier and later commits that reused
+          the same files.
         </p>
         <h2>3. Investigate</h2>
         <p>
